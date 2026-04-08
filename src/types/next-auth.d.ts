@@ -7,6 +7,7 @@ declare module "next-auth" {
       id: string;
       role: string;
       department?: string;
+      departmentId?: string;
     } & DefaultSession["user"];
     hasuraToken?: string;
   }
@@ -15,6 +16,7 @@ declare module "next-auth" {
     id: string;
     role: string;
     department?: string;
+    departmentId?: string;
   }
 }
 
@@ -23,5 +25,6 @@ declare module "next-auth/jwt" {
     id: string;
     role: string;
     department?: string;
+    departmentId?: string;
   }
 }

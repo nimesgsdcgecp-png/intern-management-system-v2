@@ -123,7 +123,6 @@ export async function POST(request: NextRequest) {
       assignedToAll: !!body.assignedToAll,
       deadline: body.deadline,
       priority: (body.priority || "medium").toLowerCase(),
-      status: (body.status || "pending").toLowerCase(),
     });
 
     // 3. Create assignments

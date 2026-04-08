@@ -7,7 +7,8 @@ import {
   INSERT_TASK_ASSIGNMENTS,
   REPLACE_TASK_ASSIGNMENTS,
   UPDATE_TASK_BY_CREATOR,
-  UPDATE_TASK_STATUS,
+  UPDATE_TASK_ASSIGNMENT_STATUS,
+  UPDATE_TASK_STATUS_BULK,
 } from "@/lib/graphql/mutations";
 import { logActivity } from "@/lib/activityService";
 
@@ -67,11 +68,13 @@ export async function PUT(
         return NextResponse.json({ error: "Not authorized to update this task" }, { status: 403 });
       }
 
-      if (updates.status && ["pending", "in-progress", "completed"].includes(updates.status)) {
+      if (updates.status && ["pending", "in-progress", "review", "completed"].includes(updates.status)) {
+        // Status is now per-intern on task_assignments table
         await hasuraMutation(
-          UPDATE_TASK_STATUS,
+          UPDATE_TASK_ASSIGNMENT_STATUS,
           {
-            id,
+            taskId: id,
+            internId: userId,
             status: updates.status,
           }
         );
@@ -87,13 +90,22 @@ export async function PUT(
           description: updates?.description ?? task.description,
           deadline: updates?.deadline ?? task.deadline,
           priority: updates?.priority ?? task.priority,
-          status: updates?.status ?? task.status,
           assignedToAll:
             typeof updates?.assignedToAll === "boolean"
               ? updates.assignedToAll
               : task.assignedToAll,
         }
       );
+      
+      if (updates.status && ["pending", "in-progress", "review", "completed"].includes(updates.status)) {
+        await hasuraMutation(
+          UPDATE_TASK_STATUS_BULK,
+          {
+            taskId: id,
+            status: updates.status,
+          }
+        );
+      }
 
       if (Array.isArray(updates?.assignedInterns) || updates?.assignedIntern) {
         const assignedInterns = Array.isArray(updates?.assignedInterns)

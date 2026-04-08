@@ -462,13 +462,13 @@ export default function TasksPage() {
             <div className="space-y-2">
               <label className="label">Search Tasks</label>
               <div className="relative group">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-content-muted group-focus-within:text-primary transition-colors" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-content-muted group-focus-within:text-primary transition-colors pointer-events-none" />
                 <input
                   type="text"
                   placeholder="Ex: Database Migration"
                   value={filters.title}
                   onChange={(e) => handleFilterChange("title", e.target.value)}
-                  className="input pl-10"
+                  className="input has-icon-left"
                 />
               </div>
             </div>
@@ -646,7 +646,7 @@ export default function TasksPage() {
                           <div className="flex items-center justify-end gap-3">
                             <button
                               onClick={() => handleDelete(task.id)}
-                              className="btn btn-ghost hover:bg-error-subtle hover:text-error-text"
+                              className="btn btn-ghost btn-icon-delete"
                               title="Archive Directive"
                             >
                               <Trash2 className="w-4 h-4" />

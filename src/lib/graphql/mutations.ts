@@ -248,6 +248,9 @@ export const UPDATE_TASK_ASSIGNMENT_STATUS = gql`
   }
 `;
 
+export const UPDATE_TASK_STATUS = UPDATE_TASK_ASSIGNMENT_STATUS;
+
+
 export const UPDATE_TASK_BY_CREATOR = gql`
   mutation UpdateTaskByCreator(
     $id: uuid!
@@ -268,6 +271,17 @@ export const UPDATE_TASK_BY_CREATOR = gql`
       }
     ) {
       id
+    }
+  }
+`;
+
+export const UPDATE_TASK_STATUS_BULK = gql`
+  mutation UpdateTaskStatusBulk($taskId: uuid!, $status: task_status!) {
+    update_task_assignments(
+      where: { task_id: { _eq: $taskId } },
+      _set: { status: $status }
+    ) {
+      affected_rows
     }
   }
 `;

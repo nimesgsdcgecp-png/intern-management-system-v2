@@ -5,7 +5,7 @@ import { AttendanceTable } from "@/components/features/AttendanceTable";
 import { useState, useEffect, useCallback } from "react";
 import { StatsGrid } from "@/components/ui/StatsGrid";
 import { useSession } from "next-auth/react";
-import { Clock, CheckCircle2, ShieldCheck, Calendar, Users, Activity, Filter, RefreshCw } from "lucide-react";
+import { Clock, CheckCircle2, Calendar, Users, Activity, RefreshCw } from "lucide-react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 
 interface AttendanceItem {
@@ -17,6 +17,8 @@ interface AttendanceItem {
     };
   };
 }
+
+const DEPARTMENTS = ["AI", "ODOO", "JAVA", "MOBILE", "SAP", "QC", "PHP", "RPA"];
 
 export default function AttendanceMonitorPage() {
   const { data: session } = useSession();
@@ -102,70 +104,20 @@ export default function AttendanceMonitorPage() {
     },
   ];
 
-  const DEPARTMENTS = ["AI", "ODOO", "JAVA", "MOBILE", "SAP", "QC", "PHP", "RPA"];
-
   return (
     <DashboardLayout>
-      <div className="space-y-12 pb-20">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
+      <div className="w-full">
+        {/* Page Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-4xl font-extrabold text-content-primary tracking-tight uppercase">
-              Attendance <span className="text-indigo-600">Monitor</span>
+            <h1 className="text-2xl font-bold text-content-primary">
+              Attendance Monitor
             </h1>
-            <p className="text-content-secondary mt-1 font-medium italic">
+            <p className="text-sm text-content-secondary mt-1">
               {isMentor ? "Tracking daily attendance for your department." : "Overview of intern attendance across all departments."}
             </p>
           </div>
-          <div className="flex items-center gap-3">
-             <div className="px-5 py-2.5 bg-indigo-50 text-indigo-700 rounded-lg text-[10px] font-black flex items-center gap-3 border border-indigo-100 uppercase tracking-widest shadow-sm">
-                <ShieldCheck className="w-4 h-4" />
-                {isMentor ? "MENTOR" : "ADMIN"}
-             </div>
-          </div>
-        </div>
-
-        <StatsGrid stats={statsData} loading={loading} />
-
-        <div className="bg-surface-card rounded-lg p-10 border border-border-subtle shadow-sm relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-8 opacity-5">
-             <Filter className="w-32 h-32 text-indigo-600" />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 items-end relative z-10">
-            <div className="space-y-3">
-               <label className="text-[10px] font-black text-content-muted uppercase tracking-[0.2em] ml-1">Select Date</label>
-               <div className="relative group">
-                  <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-content-muted group-focus-within:text-indigo-500 transition-colors" />
-                  <input 
-                    type="date" 
-                    value={date} 
-                    onChange={(e) => updateQueryParams({ date: e.target.value, page: 1 })}
-                    className="input"
-                  />
-               </div>
-            </div>
-
-            {!isMentor ? (
-              <div className="space-y-3">
-                 <label className="text-[10px] font-black text-content-muted uppercase tracking-[0.2em] ml-1">Sector Filter</label>
-                 <select
-                   value={department}
-                   onChange={(e) => updateQueryParams({ department: e.target.value, page: 1 })}
-                   className="input"
-                 >
-                   <option value="">All Operational Streams</option>
-                   {DEPARTMENTS.map(d => <option key={d} value={d}>{d} DIVISION</option>)}
-                 </select>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                 <label className="text-[10px] font-black text-content-muted uppercase tracking-[0.2em] ml-1">Active Division</label>
-                 <div className="badge badge-primary">
-                   {department || "N/A"}
-                   <ShieldCheck className="w-4 h-4" />
-                 </div>
-              </div>
-            )}
-            
+          <div className="flex gap-4">
             <button 
               onClick={() => { 
                 updateQueryParams({ 
@@ -174,7 +126,7 @@ export default function AttendanceMonitorPage() {
                   page: 1 
                 }); 
               }}
-              className="btn btn-primary"
+              className="btn btn-secondary"
             >
               <RefreshCw className="w-4 h-4" />
               Reset Filters
@@ -182,29 +134,74 @@ export default function AttendanceMonitorPage() {
           </div>
         </div>
 
-        <div className="space-y-8">
-          <div className="flex items-center justify-between px-4">
-             <h2 className="text-xl font-black text-content-primary uppercase tracking-tight flex items-center gap-4">
-                <Users className="w-7 h-7 text-indigo-600" />
-                Attendance Records
-             </h2>
-             <div className="text-[10px] font-black text-content-muted uppercase tracking-widest bg-surface-card shadow-sm px-6 py-3 rounded-full border border-border-subtle italic">
-                Active Cycle: {new Date(date).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase()}
-             </div>
+        {/* Stats Section */}
+        <div className="mb-8">
+          <StatsGrid stats={statsData} loading={loading} />
+        </div>
+
+        {/* Filter Section */}
+        <div className="card p-8 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="space-y-2">
+              <label className="label">Select Date</label>
+              <div className="relative group">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-content-muted group-focus-within:text-primary transition-colors z-10 pointer-events-none" />
+                <input 
+                  type="date" 
+                  value={date} 
+                  onChange={(e) => updateQueryParams({ date: e.target.value, page: 1 })}
+                  className="input has-icon-left"
+                />
+              </div>
+            </div>
+
+            {!isMentor && (
+              <div className="space-y-2">
+                <label className="label">Department</label>
+                <select
+                  value={department}
+                  onChange={(e) => updateQueryParams({ department: e.target.value, page: 1 })}
+                  className="select"
+                >
+                  <option value="">All Departments</option>
+                  {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+            )}
+
+            {isMentor && (
+              <div className="space-y-2">
+                <label className="label">Your Department</label>
+                <div className="input bg-surface-muted flex items-center">
+                  <span className="badge badge-primary">{department || "N/A"}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Table Section */}
+        <div className="section">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-semibold text-content-primary flex items-center gap-3">
+              <Users className="w-5 h-5 text-primary" />
+              Attendance Records
+            </h2>
+            <span className="text-sm text-content-secondary">
+              {new Date(date).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}
+            </span>
           </div>
           
-          <div className="rounded-lg border border-border-subtle overflow-hidden bg-surface-card shadow-sm hover:shadow-2xl transition-all duration-700">
-             <div className="p-10">
-                <AttendanceTable 
-                  date={date} 
-                  department={department} 
-                  mode="all" 
-                  page={page} 
-                  pageSize={pageSize}
-                  onPageChange={(p) => updateQueryParams({ page: p })}
-                  onPageSizeChange={(s) => updateQueryParams({ pageSize: s, page: 1 })}
-                />
-             </div>
+          <div className="table-container">
+            <AttendanceTable 
+              date={date} 
+              department={department} 
+              mode="all" 
+              page={page} 
+              pageSize={pageSize}
+              onPageChange={(p) => updateQueryParams({ page: p })}
+              onPageSizeChange={(s) => updateQueryParams({ pageSize: s, page: 1 })}
+            />
           </div>
         </div>
       </div>

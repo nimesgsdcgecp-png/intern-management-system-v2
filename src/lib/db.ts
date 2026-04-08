@@ -81,10 +81,12 @@ export function mapTaskRow(row: Record<string, unknown>) {
     const statuses = assignments.map(a => a.status);
     if (statuses.every(s => s === "completed")) {
       aggregateStatus = "completed";
-    } else if (statuses.some(s => s === "in-progress" || s === "review")) {
+    } else if (statuses.some(s => s === "review")) {
+      aggregateStatus = "review"; // Correctly map to review column
+    } else if (statuses.some(s => s === "in-progress")) {
       aggregateStatus = "in-progress";
     } else if (statuses.some(s => s === "completed")) {
-      aggregateStatus = "in-progress";
+      aggregateStatus = "in-progress"; // Partial completion counts as in-progress
     }
   }
   

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { AttendanceTable } from "@/components/features/AttendanceTable";
 import { StatsGrid } from "@/components/ui/StatsGrid";
-import { Clock, Calendar, CheckCircle2, History, Timer, Loader2, LogIn, LogOut, ShieldCheck } from "lucide-react";
+import { Clock, Calendar, CheckCircle2, History, Timer, Loader2, LogIn, LogOut } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Swal from "sweetalert2";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
@@ -146,34 +146,38 @@ export default function InternAttendancePage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-12 pb-20">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
+      <div className="w-full">
+        {/* Page Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-4xl font-extrabold text-content-primary tracking-tight uppercase">
-              Work <span className="text-indigo-600">History</span>
+            <h1 className="text-2xl font-bold text-content-primary">
+              My Attendance
             </h1>
-            <p className="text-content-secondary mt-1 font-medium italic">Track chronological records and performance metrics.</p>
-          </div>
-          <div className="flex items-center gap-3">
-             <div className="px-5 py-2.5 bg-indigo-50 text-indigo-700 rounded-lg text-[10px] font-black flex items-center gap-3 border border-indigo-100 uppercase tracking-widest shadow-sm">
-                <ShieldCheck className="w-4 h-4" />
-                WORKSPACE ACCESS VERIFIED
-             </div>
+            <p className="text-sm text-content-secondary mt-1">
+              Track your daily work hours and attendance history.
+            </p>
           </div>
         </div>
 
-        <div className="bg-surface-card rounded-lg p-10 border border-border-subtle shadow-sm flex flex-col md:flex-row items-center justify-between gap-8 group">
-          <div className="flex items-center gap-6">
-            <div className="badge badge-primary">
-              <Clock className="w-7 h-7" />
+        {/* Clock In/Out Card */}
+        <div className="card p-8 mb-8">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-primary-subtle flex items-center justify-center">
+                <Clock className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-content-primary">Today&apos;s Status</h3>
+                <p className="text-sm text-content-secondary">
+                  {todayRecord?.clock_in 
+                    ? (todayRecord?.clock_out ? 'Shift completed' : `Clocked in at ${new Date(todayRecord.clock_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`)
+                    : 'Not clocked in yet'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-xl font-black text-content-primary tracking-tighter uppercase">Operational Status</h3>
-              <p className="text-[10px] font-black text-content-muted uppercase tracking-widest leading-none mt-1">Status: {todayRecord?.clock_in ? (todayRecord?.clock_out ? 'Complete' : 'Active') : 'Inactive'}</p>
-            </div>
-          </div>
-          <AnimatePresence mode="wait">
-            {!todayRecord?.clock_in ? (
+            
+            <AnimatePresence mode="wait">
+              {!todayRecord?.clock_in ? (
                 <motion.button
                   key="clock-in"
                   initial={{ opacity: 0, x: 20 }}
@@ -186,7 +190,7 @@ export default function InternAttendancePage() {
                   {punching ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
                   Clock In
                 </motion.button>
-            ) : !todayRecord?.clock_out ? (
+              ) : !todayRecord?.clock_out ? (
                 <motion.button
                   key="clock-out"
                   initial={{ opacity: 0, x: 20 }}
@@ -199,59 +203,60 @@ export default function InternAttendancePage() {
                   {punching ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogOut className="w-4 h-4" />}
                   Clock Out
                 </motion.button>
-            ) : (
+              ) : (
                 <motion.div
                   key="done"
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="badge badge-success"
+                  className="badge badge-success px-4 py-2"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  Cycle Completed
+                  Completed
                 </motion.div>
-            )}
-          </AnimatePresence>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
 
-        <StatsGrid stats={statsData} loading={loading} />
-
-        <div className="space-y-8">
-            <div className="flex items-center justify-between px-4">
-                <h2 className="text-xl font-black text-content-primary uppercase tracking-tight flex items-center gap-3">
-                   <History className="w-6 h-6 text-indigo-600" />
-                   Attendance Ledger
-                </h2>
-                <div className="text-[10px] font-black text-content-muted uppercase tracking-widest bg-surface-muted px-6 py-3 rounded-full border border-border-subtle shadow-sm">
-                   PERIOD: {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                </div>
-            </div>
-            
-            <div className="rounded-lg border border-border-subtle overflow-hidden shadow-sm bg-surface-card p-8">
-               <AttendanceTable 
-                 mode="personal" 
-                 page={page} 
-                 pageSize={pageSize}
-                 onPageChange={(p) => updateQueryParams({ page: p })}
-                 onPageSizeChange={(s) => updateQueryParams({ pageSize: s, page: 1 })}
-               />
-            </div>
+        {/* Stats Section */}
+        <div className="mb-8">
+          <StatsGrid stats={statsData} loading={loading} />
         </div>
 
-        <div className="bg-indigo-50/30 p-10 rounded-lg border border-indigo-100/50 group relative overflow-hidden">
-           <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:scale-125 transition-transform duration-700">
-              <Calendar className="w-32 h-32 text-indigo-600" />
-           </div>
-           <div className="flex items-start gap-8 relative z-10">
-              <div className="p-5 bg-surface-card rounded-lg text-indigo-600 shadow-xl  border border-indigo-100 group-hover:rotate-6 transition-transform">
-                 <Calendar className="w-8 h-8" />
-              </div>
-              <div>
-                 <h4 className="text-[11px] font-black text-indigo-900 uppercase tracking-[0.2em] mb-4">Precision Logging Protocol</h4>
-                 <p className="text-[13px] text-indigo-900/60 font-semibold leading-relaxed max-w-3xl">
-                    Your temporal activity is synchronized in real-time with the central governance system. Ensure precise logging intervals to maintain accurate productivity metrics for final certification. 
-                 </p>
-              </div>
-           </div>
+        {/* History Table */}
+        <div className="section">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-semibold text-content-primary flex items-center gap-3">
+              <History className="w-5 h-5 text-primary" />
+              Attendance History
+            </h2>
+            <span className="text-sm text-content-secondary">
+              {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </span>
+          </div>
+          
+          <div className="table-container">
+            <AttendanceTable 
+              mode="personal" 
+              page={page} 
+              pageSize={pageSize}
+              onPageChange={(p) => updateQueryParams({ page: p })}
+              onPageSizeChange={(s) => updateQueryParams({ pageSize: s, page: 1 })}
+            />
+          </div>
+        </div>
+
+        {/* Info Card */}
+        <div className="card p-6 mt-8 bg-primary-subtle border-primary/20">
+          <div className="flex items-start gap-4">
+            <Calendar className="w-5 h-5 text-primary mt-0.5" />
+            <div>
+              <h4 className="font-medium text-content-primary mb-1">Attendance Tracking</h4>
+              <p className="text-sm text-content-secondary">
+                Your attendance is recorded automatically when you clock in and out. Make sure to clock out at the end of each work day to accurately track your hours.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </DashboardLayout>

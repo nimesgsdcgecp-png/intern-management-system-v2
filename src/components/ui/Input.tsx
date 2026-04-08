@@ -69,7 +69,7 @@ export function Input({
           className={`
             input
             ${leftIcon ? "has-icon-left" : ""}
-            ${(rightIcon || (isPassword && showPasswordToggle) || error || success) ? "pr-10" : ""}
+            ${(rightIcon || (isPassword && showPasswordToggle) || error || success) ? "has-icon-right" : ""}
           `}
           value={value}
           {...props}

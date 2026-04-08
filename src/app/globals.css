@@ -481,6 +481,49 @@ nav ul, nav ol { list-style: none; margin: 0; padding: 0; }
 .btn-ghost:hover  { background: var(--surface-muted); color: var(--text-primary); }
 .btn-ghost:active { background: var(--border-subtle); }
 
+.btn-action-edit   { color: var(--color-primary-text) !important; }
+.btn-action-edit { 
+  color: var(--color-info-text) !important; 
+}
+.btn-action-edit:hover { 
+  background: var(--color-info-subtle) !important; 
+  color: var(--color-info) !important;
+}
+.btn-action-delete { 
+  color: var(--color-error-text) !important; 
+}
+.btn-action-delete:hover { 
+  background: var(--color-error-subtle) !important; 
+  color: var(--color-error) !important;
+}
+
+/* Icon button color variants */
+.btn-icon-primary {
+  color: var(--color-primary-text);
+}
+.btn-icon-primary:hover {
+  background: var(--color-primary-subtle);
+  color: var(--color-primary);
+}
+.btn-icon-danger,
+.btn-icon-delete {
+  color: var(--color-error-text);
+}
+.btn-icon-danger:hover,
+.btn-icon-delete:hover {
+  background: var(--color-error-subtle);
+  color: var(--color-error);
+}
+.btn-icon-info,
+.btn-icon-edit {
+  color: var(--color-info-text);
+}
+.btn-icon-info:hover,
+.btn-icon-edit:hover {
+  background: var(--color-info-subtle);
+  color: var(--color-info);
+}
+
 /* Destructive */
 .btn-destructive {
   background: var(--color-error);
@@ -533,8 +576,20 @@ nav ul, nav ol { list-style: none; margin: 0; padding: 0; }
   transition: border-color var(--duration-fast) var(--ease-default),
               box-shadow   var(--duration-fast) var(--ease-default);
 }
-.input.has-icon-left { padding-left: 2.5rem; }
-.input.has-icon-right { padding-right: 2.5rem; }
+.input.has-icon-left { padding-left: 3.25rem !important; }
+.input.has-icon-right { padding-right: 3.25rem !important; }
+
+/* Date and time inputs with icon adjustment */
+input[type="date"].input,
+input[type="time"].input,
+input[type="datetime-local"].input {
+  padding-right: 0.75rem;
+}
+input[type="date"].input.has-icon-left,
+input[type="time"].input.has-icon-left,
+input[type="datetime-local"].input.has-icon-left {
+  padding-left: 3.25rem !important;
+}
 
 .input::placeholder         { color: var(--text-muted); }
 .input:hover                { border-color: var(--border-strong); }
@@ -653,7 +708,6 @@ textarea.input {
   margin-bottom: var(--space-1);
   font-size: 0.6875rem;
   font-weight: 600;
-  text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--text-nav-muted);
 }
@@ -718,19 +772,18 @@ textarea.input {
 .table thead    { background: var(--surface-muted); }
 
 .table th {
-  padding: var(--space-3) var(--space-4);
+  padding: 1rem 1.25rem;
   text-align: left;
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--text-secondary);
-  text-transform: uppercase;
   letter-spacing: 0.05em;
   white-space: nowrap;
   border-bottom: 1px solid var(--border-default);
 }
 
 .table td {
-  padding: var(--space-3) var(--space-4);
+  padding: 1rem 1.25rem;
   color: var(--text-primary);
   border-bottom: 1px solid var(--border-subtle);
 }
@@ -740,6 +793,22 @@ textarea.input {
 
 .table th[aria-sort]       { cursor: pointer; user-select: none; }
 .table th[aria-sort]:hover { color: var(--text-primary); }
+
+/* Table with checkbox selection column */
+.table-selectable th:first-child,
+.table-selectable td:first-child {
+  width: 3rem;
+  min-width: 3rem;
+  max-width: 3rem;
+  padding-left: 1rem;
+  padding-right: 0.5rem;
+}
+
+/* Table vertical alignment */
+.table th,
+.table td {
+  vertical-align: middle;
+}
 
 /* Responsive table scroll wrapper */
 .table-scroll {
