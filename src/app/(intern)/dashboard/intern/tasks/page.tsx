@@ -152,12 +152,12 @@ export default function MyTasksPage() {
           <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
             <div className="flex flex-col md:flex-row items-center gap-6 w-full lg:w-auto">
               <div className="relative group w-full md:w-64">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-content-muted group-focus-within:text-indigo-500 transition-colors" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-content-muted group-focus-within:text-indigo-500 transition-colors pointer-events-none" />
                 <input
                   placeholder="Task title..."
                   value={search}
                   onChange={(e) => updateQueryParams({ search: e.target.value, page: 1 })}
-                  className="input"
+                  className="input has-icon-left"
                 />
               </div>
               <div className="flex p-1 bg-surface-muted rounded-2xl border border-border-subtle h-[46px] w-full md:w-auto">

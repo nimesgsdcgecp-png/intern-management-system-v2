@@ -39,6 +39,26 @@ export default function CalendarPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [newEvent, setNewEvent] = useState<{
+    title: string;
+    description: string;
+    startTime: string;
+    endTime: string;
+    location: string;
+    type: "company" | "department";
+    departmentId: string;
+  }>({
+    title: "",
+    description: "",
+    startTime: "",
+    endTime: "",
+    location: "",
+    type: "company",
+    departmentId: ""
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchEvents = useCallback(async () => {
     try {
@@ -55,9 +75,22 @@ export default function CalendarPage() {
     }
   }, []);
 
+  const fetchDepartments = useCallback(async () => {
+    try {
+      const res = await fetch("/api/departments");
+      if (res.ok) {
+        const data = await res.json();
+        setDepartments(data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch departments:", error);
+    }
+  }, []);
+
   useEffect(() => {
     fetchEvents();
-  }, [fetchEvents]);
+    fetchDepartments();
+  }, [fetchEvents, fetchDepartments]);
 
   const daysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
   const firstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
@@ -100,7 +133,10 @@ export default function CalendarPage() {
             <ChevronRight className="w-4 h-4" />
           </Button>
           {session?.user?.role !== "intern" && (
-            <Button className="ml-2 gap-2 rounded-xl">
+            <Button 
+              onClick={() => setIsAddModalOpen(true)}
+              className="ml-2 gap-2 rounded-xl"
+            >
               <Plus className="w-4 h-4" />
               <span>Add Event</span>
             </Button>
@@ -189,6 +225,151 @@ export default function CalendarPage() {
         </Card>
 
         <AnimatePresence>
+          {isAddModalOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsAddModalOpen(false)}
+                className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg z-50 p-4"
+              >
+                <Card className="p-8 shadow-2xl rounded-3xl border-none">
+                  <h2 className="text-2xl font-bold text-content-primary mb-6">Create New Event</h2>
+                  
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    setIsSubmitting(true);
+                    try {
+                      const res = await fetch("/api/events", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(newEvent)
+                      });
+                      if (res.ok) {
+                        setIsAddModalOpen(false);
+                        setNewEvent({
+                          title: "",
+                          description: "",
+                          startTime: "",
+                          endTime: "",
+                          location: "",
+                          type: "company",
+                          departmentId: ""
+                        });
+                        fetchEvents();
+                      }
+                    } catch (error) {
+                      console.error("Failed to create event:", error);
+                    } finally {
+                      setIsSubmitting(false);
+                    }
+                  }} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-content-secondary mb-1">Title</label>
+                      <input
+                        type="text"
+                        required
+                        value={newEvent.title}
+                        onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
+                        className="w-full p-3 rounded-xl border border-border bg-surface-nav/30 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        placeholder="Event title"
+                      />
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-content-secondary mb-1">Start Time</label>
+                        <input
+                          type="datetime-local"
+                          required
+                          value={newEvent.startTime}
+                          onChange={(e) => setNewEvent({ ...newEvent, startTime: e.target.value })}
+                          className="w-full p-3 rounded-xl border border-border bg-surface-nav/30"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-content-secondary mb-1">End Time</label>
+                        <input
+                          type="datetime-local"
+                          required
+                          value={newEvent.endTime}
+                          onChange={(e) => setNewEvent({ ...newEvent, endTime: e.target.value })}
+                          className="w-full p-3 rounded-xl border border-border bg-surface-nav/30"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-content-secondary mb-1">Type</label>
+                      <select
+                        value={newEvent.type}
+                        onChange={(e) => setNewEvent({ ...newEvent, type: e.target.value as "company" | "department" })}
+                        className="w-full p-3 rounded-xl border border-border bg-surface-nav/30"
+                      >
+                        <option value="company">Company Wide</option>
+                        <option value="department">Department Specific</option>
+                      </select>
+                    </div>
+
+                    {newEvent.type === "department" && (
+                      <div>
+                        <label className="block text-sm font-medium text-content-secondary mb-1">Department</label>
+                        <select
+                          required
+                          value={newEvent.departmentId}
+                          onChange={(e) => setNewEvent({ ...newEvent, departmentId: e.target.value })}
+                          className="w-full p-3 rounded-xl border border-border bg-surface-nav/30"
+                        >
+                          <option value="">Select Department</option>
+                          {departments.map(dept => (
+                            <option key={dept.id} value={dept.id}>{dept.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-sm font-medium text-content-secondary mb-1">Location</label>
+                      <input
+                        type="text"
+                        value={newEvent.location}
+                        onChange={(e) => setNewEvent({ ...newEvent, location: e.target.value })}
+                        className="w-full p-3 rounded-xl border border-border bg-surface-nav/30"
+                        placeholder="e.g. Main Hall or Zoom Link"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-content-secondary mb-1">Description</label>
+                      <textarea
+                        value={newEvent.description}
+                        onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
+                        className="w-full p-3 rounded-xl border border-border bg-surface-nav/30 h-24"
+                        placeholder="Event description..."
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4">
+                      <Button type="button" variant="secondary" onClick={() => setIsAddModalOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button type="submit" disabled={isSubmitting}>
+                        {isSubmitting ? "Creating..." : "Create Event"}
+                      </Button>
+                    </div>
+                  </form>
+                </Card>
+              </motion.div>
+            </>
+          )}
+
           {selectedEvent && (
             <>
               <motion.div

@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     const session = await auth();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const user = session.user as { id: string; role: string; department?: string };
+    const user = session.user as { id: string; role: string; department?: string; departmentId?: string };
     const role = user.role;
     const userId = user.id;
     const userDept = user.department;
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, description, startTime, endTime, location, type, department } = body;
+    const { title, description, startTime, endTime, location, type, departmentId } = body;
 
     if (!title || !startTime || !endTime || !type) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -73,16 +73,16 @@ export async function POST(request: NextRequest) {
 
     // Role-based validation
     let eventType = type;
-    let eventDept = department;
+    let eventDeptId = departmentId;
 
     if (role === "mentor") {
       // Mentors can only create department events for their own department
       eventType = "department";
-      eventDept = userDept;
+      eventDeptId = user.departmentId; // Use session departmentId
     }
 
     if (role === "admin" && eventType === "company") {
-      eventDept = null;
+      eventDeptId = null;
     }
 
     const id = uuidv4();
@@ -93,8 +93,7 @@ export async function POST(request: NextRequest) {
       startTime,
       endTime,
       location,
-      type: eventType,
-      department: eventDept,
+      departmentId: eventDeptId,
       createdBy: userId
     });
 

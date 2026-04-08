@@ -49,13 +49,13 @@ export default function AdminMentorsPage() {
     role: "mentor"
   });
 
-  const page = parseInt(searchParams.get("page") || "1");
-  const pageSize = parseInt(searchParams.get("pageSize") || "10");
-  const search = searchParams.get("search") || "";
-  const department = searchParams.get("department") || "";
-  const sortBy = searchParams.get("sortBy") || "created_at";
-  const sortOrder = searchParams.get("sortOrder") || "desc";
-  const viewMode = (searchParams.get("view") as "grid" | "list") || "list";
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [search, setSearch] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("");
+  const [sortBy, setSortBy] = useState("created_at");
+  const [sortOrder, setSortOrder] = useState("desc" as "asc" | "desc");
+  const [viewMode, setViewMode] = useState("list" as "grid" | "list");
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -66,7 +66,7 @@ export default function AdminMentorsPage() {
       params.set("sortBy", sortBy);
       params.set("sortOrder", sortOrder);
       if (search) params.set("search", search);
-      if (department) params.set("department", department);
+      if (departmentFilter) params.set("department", departmentFilter);
       
       const res = await fetch(`/api/mentors?${params.toString()}`);
       if (res.ok) {
@@ -79,23 +79,11 @@ export default function AdminMentorsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, search, department, sortBy, sortOrder]);
+  }, [page, pageSize, search, departmentFilter, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
-
-  const updateQueryParams = (newParams: Record<string, string | number | null>) => {
-    const nextParams = new URLSearchParams(searchParams.toString());
-    Object.entries(newParams).forEach(([key, value]) => {
-      if (value === null || value === "") {
-        nextParams.delete(key);
-      } else {
-        nextParams.set(key, value.toString());
-      }
-    });
-    router.push(`${pathname}?${nextParams.toString()}`);
-  };
 
   const handleCreateOrUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -216,7 +204,9 @@ export default function AdminMentorsPage() {
 
   const handleSort = (column: string) => {
     const newOrder = sortBy === column && sortOrder === "asc" ? "desc" : "asc";
-    updateQueryParams({ sortBy: column, sortOrder: newOrder, page: 1 });
+    setSortBy(column);
+    setSortOrder(newOrder);
+    setPage(1);
   };
 
   return (
@@ -250,8 +240,8 @@ export default function AdminMentorsPage() {
                 <input
                   placeholder="Name or Email"
                   value={search}
-                  onChange={(e) => updateQueryParams({ search: e.target.value, page: 1 })}
-                  className="input pl-10"
+                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                  className="input has-icon-left"
                 />
               </div>
             </div>
@@ -260,8 +250,8 @@ export default function AdminMentorsPage() {
               <label className="label">Department</label>
               <div className="relative">
                 <select 
-                  value={department}
-                  onChange={(e) => updateQueryParams({ department: e.target.value, page: 1 })}
+                  value={departmentFilter}
+                  onChange={(e) => { setDepartmentFilter(e.target.value); setPage(1); }}
                   className="select"
                 >
                   <option value="">All Divisions</option>
@@ -276,14 +266,14 @@ export default function AdminMentorsPage() {
                <label className="label">View</label>
                <div className="flex bg-surface-muted rounded-lg p-1">
                   <button
-                    onClick={() => updateQueryParams({ view: "grid" })}
+                    onClick={() => setViewMode("grid")}
                     className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all ${viewMode === "grid" ? "bg-surface-card text-content-primary shadow-sm" : "text-content-secondary hover:text-content-primary"}`}
                   >
                     <Grid className="w-4 h-4" />
                     <span className="hidden sm:inline">Grid</span>
                   </button>
                   <button
-                    onClick={() => updateQueryParams({ view: "list" })}
+                    onClick={() => setViewMode("list")}
                     className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all ${viewMode === "list" ? "bg-surface-card text-content-primary shadow-sm" : "text-content-secondary hover:text-content-primary"}`}
                   >
                     <List className="w-4 h-4" />
@@ -345,10 +335,10 @@ export default function AdminMentorsPage() {
                               {mentor.name[0]}
                             </div>
                             <div className="flex gap-2">
-                               <button onClick={() => openEditModal(mentor)} className="btn btn-ghost btn-sm">
+                               <button onClick={() => openEditModal(mentor)} className="btn btn-ghost btn-sm btn-icon-edit">
                                   <Edit3 className="w-4 h-4" />
                                </button>
-                               <button onClick={() => handleDelete(mentor.id)} className="btn btn-ghost btn-sm text-error hover:bg-error-subtle">
+                               <button onClick={() => handleDelete(mentor.id)} className="btn btn-ghost btn-sm btn-icon-delete">
                                   <Trash2 className="w-4 h-4" />
                                </button>
                             </div>
@@ -403,8 +393,8 @@ export default function AdminMentorsPage() {
                               {sortBy === "name" ? (sortOrder === "asc" ? <ChevronUp className="w-3 h-3 text-primary-text" /> : <ChevronDown className="w-3 h-3 text-primary-text" />) : <ArrowUpDown className="w-3 h-3 opacity-0 group-hover:opacity-50" />}
                             </div>
                           </th>
-                          <th className="text-center cursor-pointer" onClick={() => handleSort("department")} aria-sort={sortBy === "department" ? (sortOrder as "ascending" | "descending") : undefined}>
-                            <div className="flex items-center justify-center gap-2">
+                          <th className="cursor-pointer" onClick={() => handleSort("department")} aria-sort={sortBy === "department" ? (sortOrder as "ascending" | "descending") : undefined}>
+                            <div className="flex items-center gap-2">
                               Department
                               {sortBy === "department" ? (sortOrder === "asc" ? <ChevronUp className="w-3 h-3 text-primary-text" /> : <ChevronDown className="w-3 h-3 text-primary-text" />) : <ArrowUpDown className="w-3 h-3 opacity-0 group-hover:opacity-50" />}
                             </div>
@@ -438,7 +428,7 @@ export default function AdminMentorsPage() {
                                 </div>
                               </div>
                             </td>
-                            <td className="text-center">
+                            <td>
                               <span className="badge badge-primary">
                                 {mentor.department}
                               </span>
@@ -450,14 +440,14 @@ export default function AdminMentorsPage() {
                               <div className="flex items-center justify-end gap-2">
                                 <button 
                                   onClick={() => openEditModal(mentor)}
-                                  className="btn btn-ghost btn-sm"
+                                  className="btn btn-ghost btn-sm btn-icon-edit"
                                   title="Edit Profile"
                                 >
                                    <Edit3 className="w-4 h-4" />
                                 </button>
                                 <button 
                                   onClick={() => handleDelete(mentor.id)}
-                                  className="btn btn-ghost btn-sm text-error hover:bg-error-subtle"
+                                  className="btn btn-ghost btn-sm btn-icon-delete"
                                   title="Delete Personnel"
                                 >
                                    <Trash2 className="w-4 h-4" />
@@ -473,8 +463,8 @@ export default function AdminMentorsPage() {
                     currentPage={page}
                     totalCount={totalCount}
                     pageSize={pageSize}
-                    onPageChange={(p) => updateQueryParams({ page: p })}
-                    onPageSizeChange={(s) => updateQueryParams({ pageSize: s, page: 1 })}
+                    onPageChange={(p) => setPage(p)}
+                    onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
                   />
                 </motion.div>
               )}

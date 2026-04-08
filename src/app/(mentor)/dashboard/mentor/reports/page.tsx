@@ -235,12 +235,12 @@ export default function MentorReportsPage() {
             <div className="space-y-2">
               <label className="text-[10px] font-black text-content-muted uppercase tracking-[0.2em] ml-1">Search by Intern Name</label>
               <div className="relative group">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-content-muted group-focus-within:text-indigo-500 transition-colors" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-content-muted group-focus-within:text-indigo-500 transition-colors pointer-events-none" />
                  <input
                   placeholder="Type intern name..."
                   value={filters.internName}
                   onChange={(e) => handleFilterChange("internName", e.target.value)}
-                  className="input"
+                  className="input has-icon-left"
                 />
               </div>
             </div>

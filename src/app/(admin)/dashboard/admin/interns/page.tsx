@@ -62,17 +62,17 @@ export default function InternsPage() {
   const [quickViewEntity, setQuickViewEntity] = useState<{ id: string, type: 'intern' | 'mentor' | 'task' } | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  // URL Persistent State
-  const page = parseInt(searchParams.get("page") || "1");
-  const pageSize = parseInt(searchParams.get("pageSize") || "10");
-  const sortBy = searchParams.get("sortBy") || "created_at";
-  const sortOrder = searchParams.get("sortOrder") || "desc";
+  // Local Pagination & Sorting State (Hidden from URL)
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [sortBy, setSortBy] = useState("created_at");
+  const [sortOrder, setSortOrder] = useState("desc");
 
   const [filters, setFilters] = useState({
-    name: searchParams.get("name") || "",
-    collegeName: searchParams.get("collegeName") || "",
-    department: searchParams.get("department") || "",
-    mentorId: searchParams.get("mentorId") || "",
+    name: "",
+    collegeName: "",
+    department: "",
+    mentorId: "",
   });
 
   const toggleSelectRow = (id: string) => {
@@ -108,8 +108,8 @@ export default function InternsPage() {
       const res = await fetch(`/api/interns?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
-        setInterns(data.items);
-        setTotalCount(data.totalCount);
+        setInterns(data.items || []);
+        setTotalCount(data.totalCount || 0);
       }
     } catch (e) {
       console.error(e);
@@ -127,26 +127,16 @@ export default function InternsPage() {
     fetchMentors();
   }, []);
 
-  const updateQueryParams = (newParams: Record<string, string | number | null>) => {
-    const nextParams = new URLSearchParams(searchParams.toString());
-    Object.entries(newParams).forEach(([key, value]) => {
-      if (value === null || value === "") {
-        nextParams.delete(key);
-      } else {
-        nextParams.set(key, value.toString());
-      }
-    });
-    router.push(`${pathname}?${nextParams.toString()}`);
-  };
-
   const handleFilterChange = (key: string, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }));
-    updateQueryParams({ [key]: value, page: 1 }); // Reset to page 1 on filter
+    setPage(1); // Reset to first page on filter change
   };
 
   const handleSort = (column: string) => {
     const newOrder = sortBy === column && sortOrder === "asc" ? "desc" : "asc";
-    updateQueryParams({ sortBy: column, sortOrder: newOrder, page: 1 });
+    setSortBy(column);
+    setSortOrder(newOrder);
+    setPage(1);
   };
 
   const fetchMentors = async () => {
@@ -476,7 +466,7 @@ export default function InternsPage() {
             <div className="form-group">
               <label className="label">Search Name</label>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-content-muted" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-content-muted pointer-events-none" />
                 <input
                   type="text"
                   placeholder="Ex: John Doe"
@@ -548,7 +538,7 @@ export default function InternsPage() {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>
+                      <th className="w-12">
                         <input
                           type="checkbox"
                           className="w-4 h-4 rounded border-border-default text-primary focus:ring-2 focus:ring-primary/20"
@@ -556,7 +546,7 @@ export default function InternsPage() {
                           onChange={toggleSelectAll}
                         />
                       </th>
-                      <th className="cursor-pointer" onClick={() => handleSort("name")} aria-sort={sortBy === "name" ? (sortOrder as "ascending" | "descending") : undefined}>
+                      <th className="cursor-pointer min-w-[220px]" onClick={() => handleSort("name")} aria-sort={sortBy === "name" ? (sortOrder as "ascending" | "descending") : undefined}>
                         <div className="flex items-center gap-2">
                           Intern Details
                           {sortBy === "name" ? (sortOrder === "asc" ? <ChevronUp className="w-3 h-3 text-primary" /> : <ChevronDown className="w-3 h-3 text-primary" />) : <ArrowUpDown className="w-3 h-3 opacity-50" />}
@@ -569,9 +559,9 @@ export default function InternsPage() {
                         </div>
                       </th>
                       <th>Mentor</th>
-                      <th className="text-center">Department</th>
-                      <th className="text-center cursor-pointer" onClick={() => handleSort("status")} aria-sort={sortBy === "status" ? (sortOrder as "ascending" | "descending") : undefined}>
-                        <div className="flex items-center justify-center gap-2">
+                      <th>Department</th>
+                      <th className="cursor-pointer" onClick={() => handleSort("status")} aria-sort={sortBy === "status" ? (sortOrder as "ascending" | "descending") : undefined}>
+                        <div className="flex items-center gap-2">
                           Status
                           {sortBy === "status" ? (sortOrder === "asc" ? <ChevronUp className="w-3 h-3 text-primary" /> : <ChevronDown className="w-3 h-3 text-primary" />) : <ArrowUpDown className="w-3 h-3 opacity-50" />}
                         </div>
@@ -617,13 +607,13 @@ export default function InternsPage() {
                           {getMentorLabel(intern.mentorId)}
                         </td>
 
-                        <td className="text-center">
+                        <td>
                           <span className="badge badge-primary">
                             {intern.department}
                           </span>
                         </td>
 
-                        <td className="text-center">
+                        <td>
                           <span className={`badge ${intern.status === "active" ? "badge-success" :
                               intern.status === "onleave" ? "badge-info" :
                                 "badge-neutral"
@@ -650,14 +640,14 @@ export default function InternsPage() {
                             </button>
                             <button
                               onClick={() => handleEdit(intern)}
-                              className="btn btn-icon btn-sm btn-ghost"
+                              className="btn btn-icon btn-sm btn-ghost btn-icon-edit"
                               title="Edit"
                             >
                               <Edit3 className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleDelete(intern.id)}
-                              className="btn btn-icon btn-sm btn-ghost hover:text-error"
+                              className="btn btn-icon btn-sm btn-ghost btn-icon-delete"
                               title="Delete"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -674,8 +664,8 @@ export default function InternsPage() {
                 currentPage={page}
                 totalCount={totalCount}
                 pageSize={pageSize}
-                onPageChange={(p) => updateQueryParams({ page: p })}
-                onPageSizeChange={(s) => updateQueryParams({ pageSize: s, page: 1 })}
+                onPageChange={(p) => setPage(p)}
+                onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
               />
             </div>
           )}

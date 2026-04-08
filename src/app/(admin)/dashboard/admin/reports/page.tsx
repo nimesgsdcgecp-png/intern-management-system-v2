@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { Pagination } from "@/components/ui/Pagination";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface Report {
   id: string;
@@ -55,23 +57,23 @@ export default function AdminReportsPage() {
   const [loading, setLoading] = useState(true);
   const [expandedReportId, setExpandedReportId] = useState<string | null>(null);
 
-  // URL Persistent Pagination & Filter State
-  const page = parseInt(searchParams.get("page") || "1");
-  const pageSize = parseInt(searchParams.get("pageSize") || "10");
-  const sortBy = searchParams.get("sortBy") || "submitted_at";
-  const sortOrder = searchParams.get("sortOrder") || "desc";
+  // Local Pagination & Sorting State (Hidden from URL)
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [sortBy, setSortBy] = useState("submitted_at");
+  const [sortOrder, setSortOrder] = useState("desc");
 
   const [filters, setFilters] = useState<ReportFilters>({
-    internName: searchParams.get("internName") || "",
-    department: searchParams.get("department") || "",
-    feedbackStatus: (searchParams.get("feedbackStatus") as "all" | "pending" | "reviewed") || "all",
-    dateFrom: searchParams.get("dateFrom") || "",
+    internName: "",
+    department: "",
+    feedbackStatus: "all",
+    dateFrom: "",
   });
 
   /**
    * Effect: Data Synchronization
    * Fetches the global registry of reports and interns to populate the dashboard.
-   * Maps interns by ID for O(1) lookup during rendering.
+   * Uses local state for pagination and filters to keep the URL clean.
    */
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -82,9 +84,6 @@ export default function AdminReportsPage() {
       params.set("sortBy", sortBy);
       params.set("sortOrder", sortOrder);
 
-      // Add filters to API request if needed (API needs updating to handle these specific keys or ilike)
-      // For now, our API handles status/etc. Let's map them.
-      // Note: Admin reports API currently just returns all. I'll pass filters in the URL.
       if (filters.internName) params.set("internName", filters.internName);
       if (filters.department) params.set("department", filters.department);
       if (filters.feedbackStatus !== "all") params.set("status", filters.feedbackStatus);
@@ -97,8 +96,8 @@ export default function AdminReportsPage() {
 
       if (reportsRes.ok) {
         const data = await reportsRes.json();
-        setReports(data.items);
-        setTotalCount(data.totalCount);
+        setReports(data.items || []);
+        setTotalCount(data.totalCount || 0);
       }
       if (internsRes.ok) {
         const internData = await internsRes.json();
@@ -117,26 +116,15 @@ export default function AdminReportsPage() {
     fetchData();
   }, [fetchData]);
 
-  const updateQueryParams = (newParams: Record<string, string | number | null>) => {
-    const nextParams = new URLSearchParams(searchParams.toString());
-    Object.entries(newParams).forEach(([key, value]) => {
-      if (value === null || value === "") {
-        nextParams.delete(key);
-      } else {
-        nextParams.set(key, value.toString());
-      }
-    });
-    router.push(`${pathname}?${nextParams.toString()}`);
-  };
-
   const handleFilterChange = (key: string, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }));
-    updateQueryParams({ [key]: value, page: 1 });
+    setPage(1); // Reset to first page on filter change
   };
 
   const handleSort = (key: string) => {
     const direction = sortBy === key && sortOrder === "asc" ? "desc" : "asc";
-    updateQueryParams({ sortBy: key, sortOrder: direction });
+    setSortBy(key);
+    setSortOrder(direction);
   };
 
   /**
@@ -185,6 +173,42 @@ export default function AdminReportsPage() {
     return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   };
 
+  const handleExportPDF = () => {
+    try {
+      const doc = new jsPDF();
+      
+      // Add Title
+      doc.setFontSize(18);
+      doc.text("Intern Work Reports", 14, 20);
+      doc.setFontSize(10);
+      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 28);
+
+      const tableData = reports.map((report) => {
+        const intern = getInternInfo(report.internId);
+        return [
+          formatDate(report.date),
+          intern.name,
+          intern.department,
+          `${report.hoursWorked}h`,
+          report.mentorFeedback ? "Verified" : "Pending Review"
+        ];
+      });
+
+      autoTable(doc, {
+        startY: 35,
+        head: [["Date", "Intern Name", "Department", "Hours", "Status"]],
+        body: tableData,
+        theme: "striped",
+        headStyles: { fillColor: [79, 70, 229] }, // Brand Primary Color
+        styles: { fontSize: 9 },
+      });
+
+      doc.save(`Intern_Reports_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error) {
+      console.error("PDF Generation failed:", error);
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="w-full">
@@ -198,7 +222,7 @@ export default function AdminReportsPage() {
           </div>
           <div className="flex gap-4 no-print">
             <button
-              onClick={() => window.print()}
+              onClick={handleExportPDF}
               className="btn btn-primary"
             >
               <FileText className="w-4 h-4" />
@@ -226,13 +250,13 @@ export default function AdminReportsPage() {
             <div className="space-y-2">
               <label className="label">Search Intern</label>
               <div className="relative group">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-content-muted group-focus-within:text-primary transition-colors" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-content-muted group-focus-within:text-primary transition-colors pointer-events-none" />
                 <input
                   type="text"
                   placeholder="Ex: John Doe"
                   value={filters.internName}
                   onChange={(e) => handleFilterChange("internName", e.target.value)}
-                  className="input pl-12"
+                  className="input has-icon-left"
                 />
               </div>
             </div>
@@ -265,12 +289,12 @@ export default function AdminReportsPage() {
             <div className="space-y-2">
               <label className="label">Date From</label>
               <div className="relative group">
-                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-content-muted group-focus-within:text-primary transition-colors" />
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-content-muted group-focus-within:text-primary transition-colors z-10 pointer-events-none" />
                 <input
                   type="date"
                   value={filters.dateFrom}
                   onChange={(e) => handleFilterChange("dateFrom", e.target.value)}
-                  className="input pl-12 cursor-pointer"
+                  className="input has-icon-left cursor-pointer"
                 />
               </div>
             </div>
@@ -361,7 +385,7 @@ export default function AdminReportsPage() {
                                 </div>
                                 <div className="flex flex-col">
                                   <span className="font-bold text-content-primary text-base tracking-tight">{intern.name}</span>
-                                  <span className="text-xs text-content-muted font-medium uppercase tracking-wider">{intern.email}</span>
+                                  <span className="text-xs text-content-muted font-medium">{intern.email}</span>
                                 </div>
                               </div>
                             </td>
@@ -404,7 +428,7 @@ export default function AdminReportsPage() {
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-6xl mx-auto">
                                   <div className="space-y-4">
                                     <div className="flex items-center justify-between px-2">
-                                      <h4 className="text-xs font-semibold text-content-secondary uppercase tracking-wider flex items-center gap-2">
+                                      <h4 className="text-xs font-semibold text-content-secondary flex items-center gap-2">
                                         <FileText className="w-4 h-4 text-primary" /> Work Description
                                       </h4>
                                     </div>
@@ -417,7 +441,7 @@ export default function AdminReportsPage() {
                                   </div>
                                   <div className="space-y-4">
                                     <div className="flex items-center justify-between px-2">
-                                      <h4 className="text-xs font-semibold text-content-secondary uppercase tracking-wider flex items-center gap-2">
+                                      <h4 className="text-xs font-semibold text-content-secondary flex items-center gap-2">
                                         <AlertCircle className="w-4 h-4 text-success" /> Mentor Feedback
                                       </h4>
                                     </div>
@@ -444,8 +468,8 @@ export default function AdminReportsPage() {
                 currentPage={page}
                 totalCount={totalCount}
                 pageSize={pageSize}
-                onPageChange={(p) => updateQueryParams({ page: p })}
-                onPageSizeChange={(s) => updateQueryParams({ pageSize: s, page: 1 })}
+                onPageChange={(p) => setPage(p)}
+                onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
               />
             </div>
           )}
