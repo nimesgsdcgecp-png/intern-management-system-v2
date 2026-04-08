@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: ims-postgres
+    hostname: postgres
+    restart: unless-stopped
+    networks:
+      ims-network:
+        aliases:
+          - postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-intern_management}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - ./volumes/postgres/data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-intern_management}" ]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 40s
+
+  hasura:
+    image: hasura/graphql-engine:v2.44.0
+    container_name: ims-hasura
+    restart: unless-stopped
+    networks:
+      - ims-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${HASURA_PORT:-8081}:8080"
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-intern_management}
+      HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
+      HASURA_GRAPHQL_DEV_MODE: "true"
+      HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_GRAPHQL_ADMIN_SECRET:-hasura}
+      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: ${HASURA_GRAPHQL_UNAUTHORIZED_ROLE:-anonymous}
+    volumes:
+      - ./volumes/hasura/metadata:/hasura-metadata
+
+networks:
+  ims-network:
+    driver: bridge
