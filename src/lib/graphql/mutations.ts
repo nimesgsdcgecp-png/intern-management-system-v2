@@ -91,6 +91,7 @@ export const CREATE_INTERN_AND_USER = gql`
     $internStatus: intern_status!
     $collegeName: String
     $university: String
+    $graduationDegree: String
     $createdByAdmin: uuid!
   ) {
     insert_users_one(
@@ -124,6 +125,7 @@ export const CREATE_INTERN_AND_USER = gql`
         status: $internStatus
         college_name: $collegeName
         university: $university
+        graduation_degree: $graduationDegree
       }
     ) {
       user_id
@@ -134,6 +136,10 @@ export const CREATE_INTERN_AND_USER = gql`
       status
       college_name
       university
+      graduation_degree
+      profile_verified
+      profile_verified_by
+      profile_verified_at
     }
   }
 `;
@@ -152,6 +158,10 @@ export const UPDATE_INTERN_AND_USER = gql`
     $status: intern_status
     $collegeName: String
     $university: String
+    $graduationDegree: String
+    $profileVerified: Boolean
+    $profileVerifiedBy: uuid
+    $profileVerifiedAt: timestamptz
   ) {
     update_users_by_pk(
       pk_columns: { id: $id }
@@ -181,9 +191,64 @@ export const UPDATE_INTERN_AND_USER = gql`
         status: $status
         college_name: $collegeName
         university: $university
+        graduation_degree: $graduationDegree
+        profile_verified: $profileVerified
+        profile_verified_by: $profileVerifiedBy
+        profile_verified_at: $profileVerifiedAt
       }
     ) {
       user_id
+    }
+  }
+`;
+
+export const UPDATE_INTERN_PROFILE_FIELDS = gql`
+  mutation UpdateInternProfileFields(
+    $id: uuid!
+    $phone: String
+    $collegeName: String
+    $university: String
+    $graduationDegree: String
+    $endDate: date
+    $profileVerified: Boolean
+  ) {
+    update_profiles_by_pk(
+      pk_columns: { user_id: $id }
+      _set: { phone: $phone }
+    ) {
+      user_id
+    }
+    update_interns_by_pk(
+      pk_columns: { user_id: $id }
+      _set: {
+        college_name: $collegeName
+        university: $university
+        graduation_degree: $graduationDegree
+        end_date: $endDate
+        profile_verified: $profileVerified
+        profile_verified_by: null
+        profile_verified_at: null
+      }
+    ) {
+      user_id
+    }
+  }
+`;
+
+export const VERIFY_INTERN_PROFILE = gql`
+  mutation VerifyInternProfile($id: uuid!, $verifiedBy: uuid!, $verifiedAt: timestamptz!) {
+    update_interns_by_pk(
+      pk_columns: { user_id: $id }
+      _set: {
+        profile_verified: true
+        profile_verified_by: $verifiedBy
+        profile_verified_at: $verifiedAt
+      }
+    ) {
+      user_id
+      profile_verified
+      profile_verified_by
+      profile_verified_at
     }
   }
 `;
@@ -614,6 +679,88 @@ export const DELETE_EVENT = gql`
   mutation DeleteEvent($id: uuid!) {
     delete_events_by_pk(id: $id) {
       id
+    }
+  }
+`;
+
+export const CREATE_DEPARTMENT = gql`
+  mutation CreateDepartment($id: uuid!, $name: String!) {
+    insert_departments_one(object: { id: $id, name: $name }) {
+      id
+      name
+      head_id
+      head: user {
+        id
+        profile {
+          name
+        }
+      }
+    }
+  }
+`;
+
+export const UPDATE_DEPARTMENT = gql`
+  mutation UpdateDepartment($id: uuid!, $name: String, $headId: uuid) {
+    update_departments_by_pk(
+      pk_columns: { id: $id }
+      _set: { name: $name, head_id: $headId }
+    ) {
+      id
+      name
+      head_id
+      head: user {
+        id
+        profile {
+          name
+        }
+      }
+    }
+  }
+`;
+
+export const UPDATE_DEPARTMENT_NAME = gql`
+  mutation UpdateDepartmentName($id: uuid!, $name: String!) {
+    update_departments_by_pk(
+      pk_columns: { id: $id }
+      _set: { name: $name }
+    ) {
+      id
+      name
+      head_id
+      head: user {
+        id
+        profile {
+          name
+        }
+      }
+    }
+  }
+`;
+
+export const UPDATE_DEPARTMENT_HEAD = gql`
+  mutation UpdateDepartmentHead($id: uuid!, $headId: uuid) {
+    update_departments_by_pk(
+      pk_columns: { id: $id }
+      _set: { head_id: $headId }
+    ) {
+      id
+      name
+      head_id
+      head: user {
+        id
+        profile {
+          name
+        }
+      }
+    }
+  }
+`;
+
+export const DELETE_DEPARTMENT = gql`
+  mutation DeleteDepartment($id: uuid!) {
+    delete_departments_by_pk(id: $id) {
+      id
+      name
     }
   }
 `;

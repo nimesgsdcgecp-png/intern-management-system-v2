@@ -1,15 +1,16 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { 
   Building2, Mail, Calendar, 
   GraduationCap, User, CheckSquare, 
   Clock, AlertCircle, ArrowUpRight,
-  Edit3
+  Edit3, BadgeCheck, Hourglass
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import Link from 'next/link';
+import { showToast } from '@/lib/notifications';
 
 interface QuickViewModalProps {
   isOpen: boolean;
@@ -35,34 +36,65 @@ interface EntityData {
   intern?: {
     status?: string;
     start_date?: string | null;
+    profile_verified?: boolean;
+    profile_verified_by?: string | null;
+    profile_verified_at?: string | null;
   } | null;
+  canVerifyProfile?: boolean;
+  profileVerifiedByName?: string;
 }
 
 export function QuickViewModal({ isOpen, onClose, entityId, entityType, onEdit }: QuickViewModalProps) {
   const [data, setData] = useState<EntityData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+
+  const fetchDetails = useCallback(async () => {
+    if (!entityId || !entityType) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/search/details?id=${entityId}&type=${entityType}`);
+      if (res.ok) {
+        const json = await res.json();
+        setData(json.data);
+      }
+    } catch (err) {
+      console.error("Quick view details failed:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [entityId, entityType]);
 
   useEffect(() => {
     if (isOpen && entityId && entityType) {
-      const fetchDetails = async () => {
-        setLoading(true);
-        try {
-          const res = await fetch(`/api/search/details?id=${entityId}&type=${entityType}`);
-          if (res.ok) {
-            const json = await res.json();
-            setData(json.data);
-          }
-        } catch (err) {
-          console.error("Quick view details failed:", err);
-        } finally {
-          setLoading(false);
-        }
-      };
       fetchDetails();
     } else {
       setData(null);
     }
-  }, [isOpen, entityId, entityType]);
+  }, [isOpen, entityId, entityType, fetchDetails]);
+
+  const handleVerifyProfile = async () => {
+    if (!entityId) return;
+    setVerifying(true);
+    try {
+      const res = await fetch(`/api/interns/${entityId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "verify_profile" }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        showToast(error?.error || "Failed to verify profile", "error");
+        return;
+      }
+      showToast("Intern profile verified", "success");
+      await fetchDetails();
+    } catch {
+      showToast("Failed to verify profile", "error");
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   const getHref = () => {
     if (entityType === 'intern') return '/dashboard/admin/interns';
@@ -100,6 +132,19 @@ export function QuickViewModal({ isOpen, onClose, entityId, entityType, onEdit }
                 <span className="badge badge-primary">
                   {(data.intern?.status || data.status || 'Active').toUpperCase()}
                 </span>
+                {entityType === "intern" && (
+                  <span
+                    className={`badge ${data.intern?.profile_verified ? "badge-success" : "badge-warning"}`}
+                    title={
+                      data.intern?.profile_verified
+                        ? `Verified by ${data.profileVerifiedByName || "User"} on ${data.intern?.profile_verified_at ? new Date(data.intern.profile_verified_at).toLocaleString() : "N/A"}`
+                        : "Pending verification"
+                    }
+                  >
+                    {data.intern?.profile_verified ? <BadgeCheck className="w-3 h-3" /> : <Hourglass className="w-3 h-3" />}
+                    {data.intern?.profile_verified ? "Verified" : "Pending Verification"}
+                  </span>
+                )}
                 <span className="badge badge-neutral">
                   ID: {data.id.split('-')[0]}
                 </span>
@@ -150,6 +195,11 @@ export function QuickViewModal({ isOpen, onClose, entityId, entityType, onEdit }
                   className="flex items-center gap-2"
                 >
                   <Edit3 className="w-4 h-4" /> Edit Details
+                </Button>
+              )}
+              {entityType === "intern" && data?.canVerifyProfile && (
+                <Button onClick={handleVerifyProfile} disabled={verifying}>
+                  {verifying ? "Verifying..." : "Verify Profile"}
                 </Button>
               )}
             </div>

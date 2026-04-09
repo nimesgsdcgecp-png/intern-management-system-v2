@@ -7,19 +7,8 @@
 // DEPARTMENT CONFIGURATION
 // =============================================================================
 
-/** Available departments in the organization */
-export const DEPARTMENTS = [
-  "AI",
-  "ODOO", 
-  "JAVA",
-  "MOBILE",
-  "SAP",
-  "QC",
-  "PHP",
-  "RPA",
-] as const;
-
-export type Department = (typeof DEPARTMENTS)[number];
+// Departments are now dynamic — fetch from /api/departments
+export type Department = string;
 
 // =============================================================================
 // USER ROLES
@@ -52,7 +41,7 @@ export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 // =============================================================================
 
 /** Intern status values matching database enum */
-export const INTERN_STATUSES = ["active", "inactive"] as const;
+export const INTERN_STATUSES = ["active", "completed", "terminated", "paused"] as const;
 export type InternStatus = (typeof INTERN_STATUSES)[number];
 
 // =============================================================================

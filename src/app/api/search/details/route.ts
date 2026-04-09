@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { hasuraQuery } from "@/lib/hasura";
-import { GET_INTERN_BY_ID, GET_MENTOR_BY_ID, GET_TASK_BY_ID } from "@/lib/graphql/queries";
+import { GET_INTERN_BY_ID, GET_MENTOR_BY_ID, GET_TASK_BY_ID, GET_USER_BY_ID } from "@/lib/graphql/queries";
 
 // Transform user data to include department on profile for frontend compatibility
 function transformUserData(user: Record<string, unknown>) {
@@ -38,9 +38,41 @@ export async function GET(request: Request) {
           GET_INTERN_BY_ID,
           { id }
         );
+        const intern = internData.users_by_pk || {};
+        const internNested = (intern.intern as Record<string, unknown> | undefined) || {};
+        const profileNested = (intern.profile as Record<string, unknown> | undefined) || {};
+        const sessionUser = session.user as { role?: string; id?: string };
+        const phoneValue = String(profileNested.phone || "").trim();
+        const hasMeaningfulPhone = Boolean(phoneValue && phoneValue.replace(/\s/g, "") !== "+91");
+        const hasExtendedProfileData = hasMeaningfulPhone || [
+          internNested.end_date,
+          internNested.college_name,
+          internNested.university,
+          internNested.graduation_degree,
+        ].some((value) => Boolean(String(value || "").trim()));
+
+        const canVerifyProfile = hasExtendedProfileData && !Boolean(internNested.profile_verified) && (
+          sessionUser.role === "admin" ||
+          (sessionUser.role === "mentor" && String(internNested.mentor_id || "") === String(sessionUser.id || ""))
+        );
+
+        let profileVerifiedByName = "";
+        const verifiedById = String(internNested.profile_verified_by || "");
+        if (verifiedById) {
+          const verifier = await hasuraQuery<{ users_by_pk: { profile?: { name?: string | null } | null } | null }>(
+            GET_USER_BY_ID,
+            { id: verifiedById }
+          );
+          profileVerifiedByName = verifier.users_by_pk?.profile?.name || "";
+        }
+
         return NextResponse.json({ 
           type: "intern",
-          data: transformUserData(internData.users_by_pk || {}) 
+          data: {
+            ...transformUserData(intern),
+            canVerifyProfile,
+            profileVerifiedByName,
+          },
         });
       case "mentor":
         const mentorData = await hasuraQuery<{ users_by_pk: Record<string, unknown> | null }>(

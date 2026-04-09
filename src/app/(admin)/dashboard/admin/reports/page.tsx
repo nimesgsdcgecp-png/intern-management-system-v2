@@ -43,8 +43,6 @@ interface ReportFilters {
   dateFrom: string;
 }
 
-const DEPARTMENTS = ["AI", "ODOO", "JAVA", "MOBILE", "SAP", "QC", "PHP", "RPA"];
-
 export default function AdminReportsPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -64,6 +62,7 @@ export default function AdminReportsPage() {
     feedbackStatus: "all",
     dateFrom: "",
   });
+  const [departments, setDepartments] = useState<string[]>([]);
 
   /**
    * Effect: Data Synchronization
@@ -110,6 +109,23 @@ export default function AdminReportsPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      try {
+        const res = await fetch("/api/departments");
+        if (!res.ok) return;
+        const data: Array<{ name?: string } | string> = await res.json();
+        const names = data
+          .map((dept) => (typeof dept === "string" ? dept : dept?.name))
+          .filter((name): name is string => Boolean(name && name.trim()));
+        setDepartments(names);
+      } catch {
+        // no-op
+      }
+    };
+    fetchDepartments();
+  }, []);
 
   const handleFilterChange = (key: string, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }));
@@ -264,7 +280,7 @@ export default function AdminReportsPage() {
                 className="select"
               >
                 <option value="">All Departments</option>
-                {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                {departments.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
 

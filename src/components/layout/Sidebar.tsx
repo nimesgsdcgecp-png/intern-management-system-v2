@@ -20,6 +20,7 @@ import {
   CalendarDays,
   CalendarCheck,
   Building,
+  Building2,
 } from "lucide-react";
 
 
@@ -62,6 +63,11 @@ export function Sidebar() {
           href: "/dashboard/admin/mentors",
           label: "Mentors",
           icon: <UserCheck className="w-5 h-5" />,
+        },
+        {
+          href: "/dashboard/admin/departments",
+          label: "Departments",
+          icon: <Building2 className="w-5 h-5" />,
         },
         {
           href: "/dashboard/admin/tasks",

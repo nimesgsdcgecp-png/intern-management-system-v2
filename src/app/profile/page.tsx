@@ -6,11 +6,12 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAppDispatch } from "@/lib/redux/hooks";
 import { addSuccess, addError } from "@/lib/redux/slices/notificationSlice";
-import { User, Mail, ShieldCheck, Key, Building2, Save, Loader2, Activity, AlertTriangle } from "lucide-react";
-import { profileEmailSchema, passwordSchema, mapZodErrors } from "@/lib/validations/schemas";
+import { User, Mail, ShieldCheck, Key, Building2, Save, Loader2, Activity, AlertTriangle, BadgeCheck, Hourglass } from "lucide-react";
+import { graduationDegrees, profileEmailSchema, passwordSchema, mapZodErrors } from "@/lib/validations/schemas";
 
 interface UserProfile {
   id: string;
@@ -18,6 +19,14 @@ interface UserProfile {
   email: string;
   role: string;
   department: string;
+  phone?: string;
+  endDate?: string;
+  collegeName?: string;
+  university?: string;
+  graduationDegree?: string;
+  profileVerified?: boolean;
+  profileVerifiedBy?: string;
+  profileVerifiedAt?: string;
 }
 
 export default function ProfilePage() {
@@ -128,10 +137,31 @@ export default function ProfilePage() {
 
   const passwordFormik = useFormik({
     initialValues: { current: "", new: "", confirm: "" },
-    validate: (values) => {
+    validate: async (values) => {
       const result = passwordSchema.safeParse(values);
-      if (result.success) return {};
-      return mapZodErrors(result.error);
+      const errors: Record<string, string> = result.success ? {} : mapZodErrors(result.error);
+
+      if (!errors.new && values.new && values.new.length >= 8) {
+        try {
+          const res = await fetch("/api/auth/password-breach", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ password: values.new }),
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            if ((data?.count ?? 0) > 0) {
+              errors.new =
+                "This password was found in known data breach lists. Please choose a unique password.";
+            }
+          }
+        } catch {
+          // Fail-open for breach API checks; base password validation still applies.
+        }
+      }
+
+      return errors;
     },
     onSubmit: async (values, helpers) => {
       helpers.setSubmitting(true);
@@ -156,6 +186,15 @@ export default function ProfilePage() {
           }));
           helpers.resetForm();
         } else {
+          if (data.error === "PASSWORD_BREACHED") {
+            helpers.setFieldTouched("new", true, false);
+            helpers.setErrors({
+              new:
+                "This password was found in known data breach lists. Please choose a unique password.",
+            });
+            return;
+          }
+
           dispatch(addError({
             title: "Password Change Failed",
             message: data.error || "Failed to change password"
@@ -168,6 +207,56 @@ export default function ProfilePage() {
         dispatch(addError({
           title: "Network Error",
           message: "Failed to connect to server"
+        }));
+      } finally {
+        helpers.setSubmitting(false);
+      }
+    },
+  });
+
+  const internDetailsFormik = useFormik({
+    initialValues: {
+      phone: profile?.phone || "",
+      collegeName: profile?.collegeName || "",
+      university: profile?.university || "",
+      graduationDegree: profile?.graduationDegree || "",
+      endDate: profile?.endDate || "",
+    },
+    enableReinitialize: true,
+    onSubmit: async (values, helpers) => {
+      helpers.setSubmitting(true);
+      try {
+        const res = await fetch("/api/profile", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "update_intern_details",
+            ...values,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          dispatch(addError({
+            title: "Update Failed",
+            message: data.error || "Failed to update internship details",
+          }));
+          return;
+        }
+        dispatch(addSuccess({
+          title: "Details Updated",
+          message: "Internship details updated and marked for verification",
+        }));
+        setProfile((prev) => prev ? {
+          ...prev,
+          ...values,
+          profileVerified: false,
+          profileVerifiedBy: "",
+          profileVerifiedAt: "",
+        } : prev);
+      } catch {
+        dispatch(addError({
+          title: "Network Error",
+          message: "Failed to connect to server",
         }));
       } finally {
         helpers.setSubmitting(false);
@@ -399,6 +488,80 @@ export default function ProfilePage() {
               </p>
               <div className="badge badge-success w-full justify-center">Status: Active</div>
             </div>
+
+            {profile.role === "intern" && (
+              <div className="card p-6 space-y-6">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-semibold text-content-primary">Internship Details</h3>
+                    <p className="text-sm text-content-secondary">
+                      Keep your internship profile updated for mentor/admin verification.
+                    </p>
+                  </div>
+                  <span
+                    className={`badge ${profile.profileVerified ? "badge-success" : "badge-warning"}`}
+                    title={
+                      profile.profileVerified
+                        ? `Verified on ${profile.profileVerifiedAt ? new Date(profile.profileVerifiedAt).toLocaleString() : "N/A"}`
+                        : "Pending verification"
+                    }
+                  >
+                    {profile.profileVerified ? <BadgeCheck className="w-3 h-3" /> : <Hourglass className="w-3 h-3" />}
+                    {profile.profileVerified ? "✓ Verified" : "⏳ Pending Verification"}
+                  </span>
+                </div>
+
+                <form onSubmit={internDetailsFormik.handleSubmit} className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input
+                      label="Phone"
+                      name="phone"
+                      value={internDetailsFormik.values.phone}
+                      onChange={internDetailsFormik.handleChange}
+                    />
+                    <Input
+                      label="End Date"
+                      type="date"
+                      name="endDate"
+                      value={internDetailsFormik.values.endDate}
+                      onChange={internDetailsFormik.handleChange}
+                    />
+                    <Input
+                      label="College Name"
+                      name="collegeName"
+                      value={internDetailsFormik.values.collegeName}
+                      onChange={internDetailsFormik.handleChange}
+                    />
+                    <Input
+                      label="University"
+                      name="university"
+                      value={internDetailsFormik.values.university}
+                      onChange={internDetailsFormik.handleChange}
+                    />
+                    <Select
+                      label="Graduation Degree"
+                      name="graduationDegree"
+                      value={internDetailsFormik.values.graduationDegree}
+                      onChange={internDetailsFormik.handleChange}
+                    >
+                      <option value="">Select degree</option>
+                      {graduationDegrees.map((degree) => (
+                        <option key={degree} value={degree}>{degree}</option>
+                      ))}
+                    </Select>
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={internDetailsFormik.isSubmitting}
+                    loading={internDetailsFormik.isSubmitting}
+                    icon={internDetailsFormik.isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    iconPosition="right"
+                  >
+                    {internDetailsFormik.isSubmitting ? "Saving..." : "Save Internship Details"}
+                  </Button>
+                </form>
+              </div>
+            )}
           </div>
         </div>
       </div>

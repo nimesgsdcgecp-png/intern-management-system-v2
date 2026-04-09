@@ -26,6 +26,7 @@ interface Intern {
   startDate: string;
   endDate?: string;
   status: string;
+  needsProfileApproval?: boolean;
 }
 
 interface Department {
@@ -80,7 +81,7 @@ export default function MyInternsPage() {
       params.set("sortBy", sortBy);
       params.set("sortOrder", sortOrder);
       params.set("mentorId", mentorId);
-      if (filters.name) params.set("search", filters.name);
+      if (filters.name) params.set("name", filters.name);
       if (filters.department) params.set("department", filters.department);
       if (filters.status) params.set("status", filters.status);
 
@@ -213,7 +214,9 @@ export default function MyInternsPage() {
               >
                 <option value="">All Statuses</option>
                 <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
+                <option value="completed">Completed</option>
+                <option value="terminated">Terminated</option>
+                <option value="paused">Paused</option>
               </select>
             </div>
 
@@ -250,7 +253,13 @@ export default function MyInternsPage() {
                   <div className="avatar avatar-lg">
                     {intern.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
                   </div>
-                  <button className="btn btn-ghost btn-sm btn-icon-edit">
+                  <button className="btn btn-ghost btn-sm btn-icon-edit relative">
+                    {intern.needsProfileApproval && (
+                      <span
+                        className="absolute top-0 right-0 w-2.5 h-2.5 rounded-full bg-red-500 border border-white"
+                        title="Profile approval pending"
+                      />
+                    )}
                     <Eye className="w-4 h-4" />
                   </button>
                 </div>
@@ -325,9 +334,15 @@ export default function MyInternsPage() {
                       <td className="text-right">
                         <button
                           onClick={() => setQuickViewEntity({ id: intern.id, type: "intern" })}
-                          className="btn btn-ghost btn-icon-edit"
+                          className="btn btn-ghost btn-icon-edit relative"
                           title="View"
                         >
+                          {intern.needsProfileApproval && (
+                            <span
+                              className="absolute top-0.5 right-0.5 w-2.5 h-2.5 rounded-full bg-red-500 border border-white"
+                              title="Profile approval pending"
+                            />
+                          )}
                           <Eye className="w-4 h-4" />
                         </button>
                       </td>

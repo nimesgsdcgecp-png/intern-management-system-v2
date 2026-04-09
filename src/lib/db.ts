@@ -48,6 +48,15 @@ export function mapInternRow(row: Record<string, unknown>) {
   const intern = (row.intern as Record<string, unknown>) || {};
   const profile = (row.profile as Record<string, unknown>) || {};
   const department = (row.department as Record<string, unknown>) || {};
+  const phoneValue = ((profile.phone as string) || "").trim();
+  const hasMeaningfulPhone = Boolean(phoneValue && phoneValue.replace(/\s/g, "") !== "+91");
+  const hasExtendedProfileData = hasMeaningfulPhone || [
+    intern.end_date,
+    intern.college_name,
+    intern.university,
+    intern.graduation_degree,
+  ].some((value) => Boolean(String(value || "").trim()));
+
   return {
     id: row.id as string,
     name: profile.name || "",
@@ -62,6 +71,11 @@ export function mapInternRow(row: Record<string, unknown>) {
     status: (intern.status as string) || "active",
     collegeName: (intern.college_name as string) || "",
     university: (intern.university as string) || "",
+    graduationDegree: (intern.graduation_degree as string) || "",
+    profileVerified: Boolean(intern.profile_verified),
+    profileVerifiedBy: (intern.profile_verified_by as string) || "",
+    profileVerifiedAt: (intern.profile_verified_at as string) || "",
+    needsProfileApproval: hasExtendedProfileData && !Boolean(intern.profile_verified),
   };
 }
 

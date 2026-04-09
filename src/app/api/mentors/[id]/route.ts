@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { hasuraMutation, hasuraQuery } from "@/lib/hasura";
-import { GET_MENTOR_BY_ID, GET_DEPARTMENT_BY_NAME } from "@/lib/graphql/queries";
+import { GET_MENTOR_BY_ID, GET_DEPARTMENT_BY_NAME, GET_DEPARTMENTS } from "@/lib/graphql/queries";
 import { UPDATE_MENTOR_USER, DELETE_MENTOR_USER } from "@/lib/graphql/mutations";
 import { logActivity } from "@/lib/activityService";
 import { createMentorSchema } from "@/lib/validations/schemas";
-
-const DEPARTMENTS = ["AI", "ODOO", "JAVA", "MOBILE", "SAP", "QC", "PHP", "RPA"];
 
 /**
  * Manage individual mentor data.
@@ -69,7 +67,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     if (!body.name || !body.email) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
 
-    const validation = createMentorSchema(DEPARTMENTS).safeParse({
+    const allDepartments = await hasuraQuery<{ departments: Array<{ name: string }> }>(GET_DEPARTMENTS);
+    const departmentNames = (allDepartments.departments || []).map((d) => d.name);
+    const validation = createMentorSchema(departmentNames).safeParse({
       name: body?.name,
       email: body?.email,
       department: body?.department,
@@ -85,7 +85,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (body.department) {
       const deptData = await hasuraQuery<{ departments: Array<{ id: string }> }>(
         GET_DEPARTMENT_BY_NAME,
-        { name: body.department.toUpperCase() }
+        { name: String(body.department).trim() }
       );
       if (deptData.departments && deptData.departments.length > 0) {
         departmentId = deptData.departments[0].id;

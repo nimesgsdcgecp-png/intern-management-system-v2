@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { hasuraMutation, hasuraQuery } from "@/lib/hasura";
-import { EXISTING_USER_BY_EMAIL } from "@/lib/graphql/queries";
+import { EXISTING_USER_BY_EMAIL, GET_DEPARTMENTS } from "@/lib/graphql/queries";
 import { CREATE_INTERN_AND_USER, CREATE_MENTOR_AND_USER, CREATE_USER, LOG_ACTIVITY } from "@/lib/graphql/mutations";
 import { hash } from "bcryptjs";
 import { sendCredentialsEmail } from "@/lib/email/emailService";
 import { generateId } from "@/lib/db";
-
-const DEPARTMENTS = ["AI", "ODOO", "JAVA", "MOBILE", "SAP", "QC", "PHP", "RPA"];
 
 function randomSuffix(length = 6) {
   return Math.random().toString(36).slice(2, 2 + length);
@@ -33,6 +31,11 @@ export async function POST(request: NextRequest) {
 
     const text = await file.text();
     const lines = text.split("\n").map(line => line.trim()).filter(line => line.length > 0);
+    const departmentsData = await hasuraQuery<{ departments: Array<{ id: string; name: string }> }>(GET_DEPARTMENTS);
+    const allowedDepartments = (departmentsData.departments || []).map((d) => String(d.name || "").trim().toUpperCase());
+    const departmentIdByName = new Map(
+      (departmentsData.departments || []).map((d) => [String(d.name || "").trim().toUpperCase(), d.id])
+    );
     
     // Assume header: Name, Email, Role, Department, Phone, [MentorEmail/ID]
     const header = lines[0].split(",").map(h => h.trim().toLowerCase());
@@ -68,13 +71,19 @@ export async function POST(request: NextRequest) {
         }
 
         const dept = (department || "").toUpperCase();
-        if (!DEPARTMENTS.includes(dept)) {
+        if (!allowedDepartments.includes(dept)) {
           results.failed++;
-          results.errors.push(`Invalid department [${dept}] for ${email}. Allowed: ${DEPARTMENTS.join(", ")}`);
+          results.errors.push(`Invalid department [${dept}] for ${email}. Allowed: ${allowedDepartments.join(", ")}`);
           continue;
         }
 
         const finalDept = dept;
+        const departmentId = departmentIdByName.get(finalDept);
+        if (!departmentId) {
+          results.failed++;
+          results.errors.push(`Department ID not found for [${finalDept}] for ${email}`);
+          continue;
+        }
 
         try {
           // Check if user exists
@@ -128,11 +137,12 @@ export async function POST(request: NextRequest) {
               password: hashedPassword,
               role: 'intern',
               name,
-              department: finalDept,
+              departmentId,
               phone: phone || "",
               internStatus: 'active',
               startDate: new Date().toISOString().split('T')[0],
-              mentorId: mentorId
+              mentorId: mentorId,
+              createdByAdmin: session.user.id
             });
           } else if (lowerRole === 'mentor') {
             await hasuraMutation(CREATE_MENTOR_AND_USER, {
@@ -141,7 +151,7 @@ export async function POST(request: NextRequest) {
                 password: hashedPassword,
                 role: 'mentor',
                 name,
-                department: finalDept,
+                departmentId,
                 phone: phone || "",
             });
           } else {
@@ -151,7 +161,7 @@ export async function POST(request: NextRequest) {
               password: hashedPassword,
               role: lowerRole,
               name,
-              department: finalDept,
+              departmentId,
               phone: phone || "",
             });
           }

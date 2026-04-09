@@ -16,6 +16,19 @@ export const GET_USER_BY_ID = gql`
         name
         phone
       }
+      intern {
+        mentor_id
+        created_by_admin
+        start_date
+        end_date
+        status
+        college_name
+        university
+        graduation_degree
+        profile_verified
+        profile_verified_by
+        profile_verified_at
+      }
     }
   }
 `;
@@ -63,6 +76,10 @@ export const GET_INTERN_BY_ID = gql`
         status
         college_name
         university
+        graduation_degree
+        profile_verified
+        profile_verified_by
+        profile_verified_at
       }
     }
   }
@@ -174,6 +191,10 @@ export const GET_ALL_INTERNS = gql`
         status
         college_name
         university
+        graduation_degree
+        profile_verified
+        profile_verified_by
+        profile_verified_at
       }
     }
     meta: users_aggregate(where: $where) {
@@ -240,6 +261,10 @@ export const GET_INTERN_PROFILE = gql`
         status
         college_name
         university
+        graduation_degree
+        profile_verified
+        profile_verified_by
+        profile_verified_at
       }
     }
   }
@@ -677,15 +702,80 @@ export const GET_DEPARTMENTS = gql`
       id
       name
       head_id
+      head: user {
+        id
+        profile {
+          name
+        }
+      }
+    }
+  }
+`;
+
+export const GET_ALL_DEPARTMENTS = gql`
+  query GetAllDepartments {
+    departments(order_by: { name: asc }) {
+      id
+      name
+      head_id
+      head: user {
+        id
+        profile {
+          name
+        }
+      }
+    }
+  }
+`;
+
+export const GET_DEPARTMENTS_WITH_STATS = gql`
+  query GetDepartmentsWithStats {
+    departments(order_by: { name: asc }) {
+      id
+      name
+      head_id
+      head: user {
+        id
+        profile {
+          name
+        }
+      }
+      mentors: users(where: { role: { _eq: "mentor" } }) {
+        id
+        profile {
+          name
+        }
+      }
+      interns_aggregate: users_aggregate(where: { role: { _eq: "intern" } }) {
+        aggregate {
+          count
+        }
+      }
+      mentors_aggregate: users_aggregate(where: { role: { _eq: "mentor" } }) {
+        aggregate {
+          count
+        }
+      }
     }
   }
 `;
 
 export const GET_DEPARTMENT_BY_NAME = gql`
   query GetDepartmentByName($name: String!) {
-    departments(where: { name: { _eq: $name } }, limit: 1) {
+    departments(where: { name: { _ilike: $name } }, limit: 1) {
       id
       name
+      head_id
+    }
+  }
+`;
+
+export const GET_DEPARTMENT_USER_COUNT = gql`
+  query GetDepartmentUserCount($departmentId: uuid!) {
+    users_aggregate(where: { department_id: { _eq: $departmentId } }) {
+      aggregate {
+        count
+      }
     }
   }
 `;

@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
     const department = searchParams.get("department");
     const collegeName = searchParams.get("collegeName");
     const mentorId = searchParams.get("mentorId");
+    const status = searchParams.get("status");
 
     const offset = (page - 1) * pageSize;
 
@@ -59,6 +60,7 @@ export async function GET(request: NextRequest) {
     if (department) where._and.push({ department: { name: { _eq: department } } });
     if (collegeName) where._and.push({ intern: { college_name: { _ilike: `%${collegeName}%` } } });
     if (mentorId) where._and.push({ intern: { mentor_id: { _eq: mentorId } } });
+    if (status) where._and.push({ intern: { status: { _eq: status } } });
 
     // Construct Sort Clause
     let orderBy: Record<string, unknown> = {};
@@ -116,10 +118,13 @@ export async function POST(request: NextRequest) {
       collegeName: body?.collegeName,
       university: body?.university,
       graduationDegree: body?.graduationDegree,
+      status: body?.status,
     });
     if (!validation.success) {
       return NextResponse.json({ error: validation.error.issues[0]?.message || "Invalid intern payload" }, { status: 400 });
     }
+    const allowedInternStatuses = new Set(["active", "completed", "terminated", "paused"]);
+    const internStatus = allowedInternStatuses.has(body?.status) ? body.status : "active";
 
     // Check if email already exists
     const existing = await hasuraQuery<{ users: { id: string }[] }>(
@@ -156,6 +161,10 @@ export async function POST(request: NextRequest) {
         status: string;
         college_name: string | null;
         university: string | null;
+        graduation_degree: string | null;
+        profile_verified: boolean;
+        profile_verified_by: string | null;
+        profile_verified_at: string | null;
       };
     }>(CREATE_INTERN_AND_USER, {
       id: internId,
@@ -167,9 +176,10 @@ export async function POST(request: NextRequest) {
         phone: validation.data.phone || null,
         mentorId: validation.data.mentorId,
         startDate: validation.data.startDate,
-        internStatus: "active",
+        internStatus,
         collegeName: validation.data.collegeName || null,
         university: validation.data.university || validation.data.collegeName || null,
+        graduationDegree: validation.data.graduationDegree || null,
         createdByAdmin: session.user.id,
       });
 

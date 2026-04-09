@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { hasuraMutation, hasuraQuery } from "@/lib/hasura";
 import {
   DELETE_INTERN_AND_USER,
+  VERIFY_INTERN_PROFILE,
   UPDATE_INTERN_AND_USER,
 } from "@/lib/graphql/mutations";
 import { GET_DEPARTMENT_BY_NAME, GET_DEPARTMENTS } from "@/lib/graphql/queries";
@@ -42,12 +43,43 @@ export async function PUT(
 ) {
   try {
     const session = await auth();
-    if (!session || (session.user as { role: string })?.role !== "admin") {
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const currentUser = session.user as { role: string; id: string };
 
     const { id } = await params;
     const updates = await request.json();
+    if (updates?.action === "verify_profile") {
+      const existingIntern = await getInternById(id);
+      if (!existingIntern) {
+        return NextResponse.json({ error: "Intern not found" }, { status: 404 });
+      }
+
+      const canVerify =
+        currentUser.role === "admin" ||
+        (currentUser.role === "mentor" && existingIntern.mentorId === currentUser.id);
+      if (!canVerify) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
+      if (existingIntern.profileVerified) {
+        return NextResponse.json({ error: "Profile already verified" }, { status: 400 });
+      }
+
+      await hasuraMutation<void>(VERIFY_INTERN_PROFILE, {
+        id,
+        verifiedBy: currentUser.id,
+        verifiedAt: new Date().toISOString(),
+      });
+
+      const verifiedIntern = await getInternById(id);
+      return NextResponse.json(verifiedIntern);
+    }
+
+    if (currentUser.role !== "admin") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const allDepartments = await hasuraQuery<{ departments: { name: string }[] }>(GET_DEPARTMENTS);
     const departmentNames = (allDepartments.departments || []).map((d) => d.name);
 
@@ -66,7 +98,7 @@ export async function PUT(
       endDate: updates?.endDate ?? existing.endDate ?? "",
       collegeName: updates?.collegeName ?? existing.collegeName ?? "",
       university: updates?.university ?? existing.university ?? "",
-      graduationDegree: "",
+      graduationDegree: updates?.graduationDegree ?? existing.graduationDegree ?? "",
     };
     const validation = createInternSchema(departmentNames).safeParse(candidate);
     if (!validation.success) {
@@ -97,6 +129,10 @@ export async function PUT(
       status: updates?.status ?? existing.status,
       collegeName: updates?.collegeName ?? existing.collegeName,
       university: updates?.university ?? existing.university,
+      graduationDegree: updates?.graduationDegree ?? existing.graduationDegree,
+      profileVerified: updates?.isInternProfileUpdate ? false : (updates?.profileVerified ?? existing.profileVerified),
+      profileVerifiedBy: updates?.isInternProfileUpdate ? null : (existing.profileVerifiedBy || null),
+      profileVerifiedAt: updates?.isInternProfileUpdate ? null : (existing.profileVerifiedAt || null),
     };
 
     await hasuraMutation<void>(
@@ -114,6 +150,10 @@ export async function PUT(
         status: payload.status || null,
         collegeName: payload.collegeName || null,
         university: payload.university || null,
+        graduationDegree: payload.graduationDegree || null,
+        profileVerified: Boolean(payload.profileVerified),
+        profileVerifiedBy: payload.profileVerifiedBy || null,
+        profileVerifiedAt: payload.profileVerifiedAt || null,
       }
     );
 

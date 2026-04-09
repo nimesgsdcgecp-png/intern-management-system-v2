@@ -29,11 +29,10 @@ interface Mentor {
   status?: string;
 }
 
-const DEFAULT_DEPARTMENTS = ["AI", "ODOO", "JAVA", "MOBILE", "SAP", "QC", "PHP", "RPA"];
 const initialMentorValues = {
   name: "",
   email: "",
-  department: "AI",
+  department: "",
   phone: "+91 ",
   role: "mentor" as const,
 };
@@ -48,7 +47,7 @@ export default function AdminMentorsPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [resetPasswordUser, setResetPasswordUser] = useState<{ id: string; name: string } | null>(null);
   const [quickViewEntity, setQuickViewEntity] = useState<{ id: string; type: "intern" | "mentor" | "task" } | null>(null);
-  const [departments, setDepartments] = useState<string[]>(DEFAULT_DEPARTMENTS);
+  const [departments, setDepartments] = useState<string[]>([]);
   
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -143,6 +142,12 @@ export default function AdminMentorsPage() {
     }
     },
   });
+
+  useEffect(() => {
+    if (!mentorFormik.values.department && departments.length > 0) {
+      mentorFormik.setFieldValue("department", departments[0], false);
+    }
+  }, [departments, mentorFormik]);
 
   const formatPhoneNumber = (value: string) => {
     const digits = value.replace(/\D/g, "");

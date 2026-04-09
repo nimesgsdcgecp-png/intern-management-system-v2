@@ -18,8 +18,6 @@ interface AttendanceItem {
   };
 }
 
-const DEPARTMENTS = ["AI", "ODOO", "JAVA", "MOBILE", "SAP", "QC", "PHP", "RPA"];
-
 export default function AttendanceMonitorPage() {
   const { data: session } = useSession();
   const router = useRouter();
@@ -36,6 +34,7 @@ export default function AttendanceMonitorPage() {
 
   const [stats, setStats] = useState({ present: 0, avgHours: "0.0", lead: "N/A" });
   const [loading, setLoading] = useState(true);
+  const [departments, setDepartments] = useState<string[]>([]);
 
   const updateQueryParams = useCallback((newParams: Record<string, string | number | null>) => {
     const nextParams = new URLSearchParams(searchParams.toString());
@@ -82,6 +81,23 @@ export default function AttendanceMonitorPage() {
   useEffect(() => {
     fetchStats();
   }, [fetchStats]);
+
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      try {
+        const res = await fetch("/api/departments");
+        if (!res.ok) return;
+        const data: Array<{ name?: string } | string> = await res.json();
+        const names = data
+          .map((dept) => (typeof dept === "string" ? dept : dept?.name))
+          .filter((name): name is string => Boolean(name && name.trim()));
+        setDepartments(names);
+      } catch {
+        // no-op
+      }
+    };
+    fetchDepartments();
+  }, []);
 
   const statsData = [
     {
@@ -164,7 +180,7 @@ export default function AttendanceMonitorPage() {
                   className="select"
                 >
                   <option value="">All Departments</option>
-                  {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                  {departments.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
             )}

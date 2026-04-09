@@ -5,6 +5,7 @@ import { hasuraMutation, hasuraQuery } from "@/lib/hasura";
 import {
   EXISTING_USER_BY_EMAIL,
   EXISTING_USER_BY_ID,
+  GET_DEPARTMENTS,
   GET_USERS,
   GET_DEPARTMENT_BY_NAME,
 } from "@/lib/graphql/queries";
@@ -12,8 +13,7 @@ import { CREATE_USER, CREATE_MENTOR_AND_USER, UPDATE_USER_PASSWORD } from "@/lib
 import { hash } from "bcryptjs";
 import { sendCredentialsEmail } from "@/lib/email/emailService";
 import { adminResetPasswordSchema, createMentorSchema } from "@/lib/validations/schemas";
-
-const DEPARTMENTS = ["AI", "ODOO", "JAVA", "MOBILE", "SAP", "QC", "PHP", "RPA"];
+import { isPasswordPwned } from "@/lib/validations/hibp";
 
 function randomSuffix(length = 6) {
   return Math.random().toString(36).slice(2, 2 + length);
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     const name = String(body?.name || "").trim();
     const email = String(body?.email || "").trim().toLowerCase();
     const role = body?.role;
-    const department = String(body?.department || "").trim().toUpperCase();
+    const department = String(body?.department || "").trim();
     const phone = String(body?.phone || "").trim();
 
     if (!name || !email || !role) {
@@ -96,7 +96,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!DEPARTMENTS.includes(department)) {
+    const allDepartments = await hasuraQuery<{ departments: Array<{ name: string }> }>(GET_DEPARTMENTS);
+    const departmentNames = (allDepartments.departments || []).map((d) => d.name);
+
+    if (!departmentNames.includes(department)) {
       return NextResponse.json(
         { error: "Invalid department" },
         { status: 400 }
@@ -104,7 +107,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (role === "mentor") {
-      const mentorValidation = createMentorSchema(DEPARTMENTS).safeParse({
+      const mentorValidation = createMentorSchema(departmentNames).safeParse({
         name,
         email,
         department,
@@ -305,6 +308,17 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json(
         { error: validation.error.issues[0]?.message || "Invalid password" },
         { status: 400 }
+      );
+    }
+
+    const breachCount = await isPasswordPwned(validation.data.password);
+    if (breachCount > 100) {
+      return NextResponse.json(
+        {
+          error: "PASSWORD_BREACHED",
+          message: "This password was found in known data breach lists. Please choose a unique password.",
+        },
+        { status: 422 }
       );
     }
 

@@ -25,9 +25,15 @@ interface Intern {
   department: string;
   mentorId: string;
   startDate: string;
+  endDate?: string;
   status: string;
   collegeName?: string;
   university?: string;
+  graduationDegree?: string;
+  profileVerified?: boolean;
+  profileVerifiedBy?: string;
+  profileVerifiedAt?: string;
+  needsProfileApproval?: boolean;
 }
 
 interface Mentor {
@@ -45,15 +51,15 @@ interface CredentialNotice {
   password: string;
 }
 
-const DEFAULT_DEPARTMENTS = ["AI", "ODOO", "JAVA", "MOBILE", "SAP", "QC", "PHP", "RPA"];
 const initialInternFormValues = {
   name: "",
   email: "",
   phone: "+91 ",
-  department: "AI",
+  department: "",
   mentorId: "",
   startDate: "",
   endDate: "",
+  status: "active",
   collegeName: "",
   university: "",
   graduationDegree: "",
@@ -70,7 +76,7 @@ export default function InternsPage() {
   const [resetPasswordUser, setResetPasswordUser] = useState<{ id: string, name: string } | null>(null);
   const [quickViewEntity, setQuickViewEntity] = useState<{ id: string, type: 'intern' | 'mentor' | 'task' } | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [departments, setDepartments] = useState<string[]>(DEFAULT_DEPARTMENTS);
+  const [departments, setDepartments] = useState<string[]>([]);
 
   // Local Pagination & Sorting State (Hidden from URL)
   const [page, setPage] = useState(1);
@@ -83,6 +89,7 @@ export default function InternsPage() {
     collegeName: "",
     department: "",
     mentorId: "",
+    status: "",
   });
 
   const toggleSelectRow = (id: string) => {
@@ -103,6 +110,7 @@ export default function InternsPage() {
       if (filters.department) params.set("department", filters.department);
       if (filters.collegeName) params.set("collegeName", filters.collegeName);
       if (filters.mentorId) params.set("mentorId", filters.mentorId);
+      if (filters.status) params.set("status", filters.status);
 
       const res = await fetch(`/api/interns?${params.toString()}`);
       if (res.ok) {
@@ -235,6 +243,12 @@ export default function InternsPage() {
     },
   });
 
+  useEffect(() => {
+    if (!internFormik.values.department && departments.length > 0) {
+      internFormik.setFieldValue("department", departments[0], false);
+    }
+  }, [departments, internFormik]);
+
   const handleEdit = (intern: Intern) => {
     internFormik.setValues({
       name: intern.name,
@@ -243,14 +257,35 @@ export default function InternsPage() {
       department: intern.department,
       mentorId: intern.mentorId,
       startDate: intern.startDate,
+      endDate: intern.endDate || "",
+      status: intern.status || "active",
       collegeName: intern.collegeName || intern.university || "",
-      endDate: "",
       university: intern.university || "",
-      graduationDegree: "",
+      graduationDegree: intern.graduationDegree || "",
     });
     internFormik.setTouched({});
     setEditingId(intern.id);
     setIsFormOpen(true);
+  };
+
+  const handleEditById = async (id: string) => {
+    const internFromList = interns.find((item) => item.id === id);
+    if (internFromList) {
+      handleEdit(internFromList);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/interns/${id}`);
+      if (!res.ok) {
+        showToast("Unable to load intern details for editing", "error");
+        return;
+      }
+      const intern = await res.json();
+      handleEdit(intern as Intern);
+    } catch {
+      showToast("Unable to load intern details for editing", "error");
+    }
   };
 
   const handleOpenCreate = () => {
@@ -396,11 +431,18 @@ export default function InternsPage() {
                  <option value="">Select degree (optional)</option>
                  {graduationDegrees.map((degree) => <option key={degree} value={degree}>{degree}</option>)}
                </Select>
-               <Select label="Assigned Department" name="department" value={internFormik.values.department} onChange={internFormik.handleChange} onBlur={internFormik.handleBlur} error={internFormik.touched.department ? internFormik.errors.department : undefined}>
-                 {departments.map(d => <option key={d} value={d}>{d}</option>)}
-               </Select>
-               <Input label="Start Date" type="date" name="startDate" value={internFormik.values.startDate} onChange={internFormik.handleChange} onBlur={internFormik.handleBlur} error={internFormik.touched.startDate ? internFormik.errors.startDate : undefined} />
-               <Input label="End Date" type="date" name="endDate" value={internFormik.values.endDate} onChange={internFormik.handleChange} onBlur={internFormik.handleBlur} error={internFormik.touched.endDate ? internFormik.errors.endDate : undefined} />
+              <Select label="Assigned Department" name="department" value={internFormik.values.department} onChange={internFormik.handleChange} onBlur={internFormik.handleBlur} error={internFormik.touched.department ? internFormik.errors.department : undefined}>
+                <option value="">Select Department</option>
+                {departments.map(d => <option key={d} value={d}>{d}</option>)}
+              </Select>
+                <Input label="Start Date" type="date" name="startDate" value={internFormik.values.startDate} onChange={internFormik.handleChange} onBlur={internFormik.handleBlur} error={internFormik.touched.startDate ? internFormik.errors.startDate : undefined} />
+                <Input label="End Date" type="date" name="endDate" value={internFormik.values.endDate} onChange={internFormik.handleChange} onBlur={internFormik.handleBlur} error={internFormik.touched.endDate ? internFormik.errors.endDate : undefined} />
+                <Select label="Internship Status" name="status" value={internFormik.values.status} onChange={internFormik.handleChange}>
+                  <option value="active">Active</option>
+                  <option value="completed">Completed</option>
+                  <option value="terminated">Terminated</option>
+                  <option value="paused">Paused</option>
+                </Select>
               {internFormik.values.startDate && new Date(internFormik.values.startDate) < new Date(new Date().setHours(0, 0, 0, 0)) && (
                 <div className="md:col-span-2 alert alert-warning">
                   <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -481,7 +523,7 @@ export default function InternsPage() {
 
         {/* Filter Bar */}
         <div className="card p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
             <div className="form-group">
               <label className="label">Search Name</label>
               <div className="relative">
@@ -529,6 +571,20 @@ export default function InternsPage() {
                 <option value="">All Mentors</option>
                 {mentors.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
+            </div>
+
+            <div className="form-group">
+              <label className="label">Status</label>
+              <Select
+                value={filters.status}
+                onChange={(e) => handleFilterChange("status", e.target.value)}
+              >
+                <option value="">All Statuses</option>
+                <option value="active">Active</option>
+                <option value="completed">Completed</option>
+                <option value="terminated">Terminated</option>
+                <option value="paused">Paused</option>
+              </Select>
             </div>
           </div>
         </div>
@@ -636,10 +692,13 @@ export default function InternsPage() {
 
                         <td>
                           <span className={`badge ${intern.status === "active" ? "badge-success" :
-                              intern.status === "onleave" ? "badge-info" :
-                                "badge-neutral"
+                              intern.status === "completed" ? "badge-primary" :
+                              intern.status === "paused" ? "badge-warning" :
+                                "badge-error"
                             }`}>
-                            {intern.status === "active" ? "Active" : intern.status === "onleave" ? "On Leave" : "Inactive"}
+                            {intern.status === "active" ? "Active" :
+                             intern.status === "completed" ? "Completed" :
+                             intern.status === "paused" ? "Paused" : "Terminated"}
                           </span>
                         </td>
 
@@ -654,9 +713,15 @@ export default function InternsPage() {
                             </button>
                             <button
                               onClick={() => setQuickViewEntity({ id: intern.id, type: 'intern' })}
-                              className="btn btn-icon btn-sm btn-ghost"
+                              className="btn btn-icon btn-sm btn-ghost relative"
                               title="Details"
                             >
+                              {intern.needsProfileApproval && (
+                                <span
+                                  className="absolute top-0.5 right-0.5 w-2.5 h-2.5 rounded-full bg-red-500 border border-white"
+                                  title="Profile approval pending"
+                                />
+                              )}
                               <Search className="w-4 h-4" />
                             </button>
                             <button
@@ -700,8 +765,7 @@ export default function InternsPage() {
         entityId={quickViewEntity?.id || null}
         entityType={quickViewEntity?.type || null}
         onEdit={(id) => {
-          setEditingId(id);
-          setIsFormOpen(true);
+          void handleEditById(id);
         }}
       />
 
