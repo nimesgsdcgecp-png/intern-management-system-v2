@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useFormik } from "formik";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -13,6 +14,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { KanbanBoard } from "@/components/features/KanbanBoard";
 import { QuickViewModal } from "@/components/features/QuickViewModal";
 import { showToast } from "@/lib/notifications";
+import { taskFormSchema, mapZodErrors } from "@/lib/validations/schemas";
 import {
   PlusCircle,
   List,
@@ -22,6 +24,8 @@ import {
   CheckSquare,
   Edit3,
   Eye,
+  AlertTriangle,
+  Loader2,
 } from "lucide-react";
 
 interface Task {
@@ -41,6 +45,16 @@ interface Intern {
   mentorId?: string;
 }
 
+const initialMentorTaskValues = {
+  title: "",
+  description: "",
+  assignedInterns: [] as string[],
+  deadline: "",
+  priority: "medium",
+  status: "pending",
+  sendEmail: false,
+};
+
 export default function MentorTasksPage() {
   const { data: session } = useSession();
   const router = useRouter();
@@ -55,16 +69,6 @@ export default function MentorTasksPage() {
   const [quickViewEntity, setQuickViewEntity] = useState<{ id: string; type: "intern" | "mentor" | "task" } | null>(null);
   const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    assignedInterns: [] as string[],
-    deadline: "",
-    priority: "medium",
-    status: "pending",
-    sendEmail: false,
-  });
 
   const page = parseInt(searchParams.get("page") || "1");
   const pageSize = viewMode === "kanban" ? 50 : parseInt(searchParams.get("pageSize") || "10");
@@ -172,94 +176,53 @@ export default function MentorTasksPage() {
     updateQueryParams({ title: null, status: null, priority: null, page: 1 });
   };
 
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
-  ) => {
-    const { name, value, type } = e.target;
-    if (type === "checkbox") {
-      const target = e.target as HTMLInputElement;
-      setFormData((prev) => ({ ...prev, [name]: target.checked }));
-    } else {
-      setFormData((prev) => ({ ...prev, [name]: value }));
-    }
-    if (formErrors[name]) {
-      setFormErrors((prev) => {
-        const next = { ...prev };
-        delete next[name];
-        return next;
-      });
-    }
-  };
+  const taskFormik = useFormik({
+    initialValues: initialMentorTaskValues,
+    validate: (values) => {
+      const result = taskFormSchema.safeParse(values);
+      if (result.success) return {};
+      return mapZodErrors(result.error);
+    },
+    onSubmit: async (values, helpers) => {
+      helpers.setSubmitting(true);
+      try {
+        const url = editingTask ? `/api/tasks/${editingTask.id}` : "/api/tasks";
+        const method = editingTask ? "PUT" : "POST";
+
+        const res = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(values),
+        });
+
+        if (res.ok) {
+          showToast(`Task ${editingTask ? "updated" : "created"} successfully`, "success");
+          fetchTasks();
+          setIsFormOpen(false);
+          setEditingTask(null);
+          helpers.resetForm({ values: initialMentorTaskValues });
+        } else {
+          const error = await res.json();
+          showToast(error.message || "Failed to save task", "error");
+        }
+      } catch {
+        showToast("Network error occurred", "error");
+      } finally {
+        helpers.setSubmitting(false);
+      }
+    },
+  });
 
   const handleToggleIntern = (id: string) => {
-    setFormData((prev) => {
-      const exists = prev.assignedInterns.includes(id);
-      const next = exists ? prev.assignedInterns.filter((i) => i !== id) : [...prev.assignedInterns, id];
-      if (formErrors.assignments && next.length > 0) {
-        setFormErrors((prevErrors) => {
-          const copy = { ...prevErrors };
-          delete copy.assignments;
-          return copy;
-        });
-      }
-      return { ...prev, assignedInterns: next };
-    });
-  };
-
-  const validate = () => {
-    const errors: Record<string, string> = {};
-    if (!formData.title.trim()) errors.title = "Title is required";
-    if (!formData.description.trim()) errors.description = "Description is required";
-    if (!formData.deadline) errors.deadline = "Deadline is required";
-    if (formData.assignedInterns.length === 0) errors.assignments = "Select at least one intern";
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validate()) return;
-
-    setLoading(true);
-    try {
-      const url = editingTask ? `/api/tasks/${editingTask.id}` : "/api/tasks";
-      const method = editingTask ? "PUT" : "POST";
-
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-
-      if (res.ok) {
-        showToast(`Task ${editingTask ? "updated" : "created"} successfully`, "success");
-        fetchTasks();
-        setIsFormOpen(false);
-        setEditingTask(null);
-        setFormData({
-          title: "",
-          description: "",
-          assignedInterns: [],
-          deadline: "",
-          priority: "medium",
-          status: "pending",
-          sendEmail: false,
-        });
-        setFormErrors({});
-      } else {
-        const error = await res.json();
-        showToast(error.message || "Failed to save task", "error");
-      }
-    } catch {
-      showToast("Network error occurred", "error");
-    } finally {
-      setLoading(false);
-    }
+    const exists = taskFormik.values.assignedInterns.includes(id);
+    const next = exists ? taskFormik.values.assignedInterns.filter((i) => i !== id) : [...taskFormik.values.assignedInterns, id];
+    taskFormik.setFieldValue("assignedInterns", next);
+    taskFormik.setFieldTouched("assignedInterns", true);
   };
 
   const handleEdit = (task: Task) => {
     setEditingTask(task);
-    setFormData({
+    taskFormik.setValues({
       title: task.title,
       description: task.description,
       assignedInterns: task.assignedInterns || [],
@@ -268,21 +231,13 @@ export default function MentorTasksPage() {
       status: task.status,
       sendEmail: false,
     });
+    taskFormik.setTouched({});
     setIsFormOpen(true);
   };
 
   const handleCreateNew = () => {
     setEditingTask(null);
-    setFormData({
-      title: "",
-      description: "",
-      assignedInterns: [],
-      deadline: "",
-      priority: "medium",
-      status: "pending",
-      sendEmail: false,
-    });
-    setFormErrors({});
+    taskFormik.resetForm({ values: initialMentorTaskValues });
     setIsFormOpen(true);
   };
 
@@ -527,27 +482,35 @@ export default function MentorTasksPage() {
         title={editingTask ? "Edit Task" : "Create Task"}
         size="lg"
       >
-        <form onSubmit={handleSubmit} className="space-y-10">
+        <form onSubmit={taskFormik.handleSubmit} className="space-y-10">
+          {taskFormik.submitCount > 0 && Object.keys(taskFormik.errors).length > 0 && (
+            <div className="alert alert-error">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <p className="text-sm font-medium">Please fix the errors below before submitting.</p>
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-8">
               <Input
                 label="Title"
                 name="title"
-                value={formData.title}
-                onChange={handleInputChange}
+                value={taskFormik.values.title}
+                onChange={taskFormik.handleChange}
+                onBlur={taskFormik.handleBlur}
                 required
                 placeholder="Ex: Weekly Progress Report"
-                error={formErrors.title}
+                error={taskFormik.touched.title ? taskFormik.errors.title : undefined}
               />
               <TextArea
                 label="Description"
                 name="description"
-                value={formData.description}
-                onChange={handleInputChange}
+                value={taskFormik.values.description}
+                onChange={taskFormik.handleChange}
+                onBlur={taskFormik.handleBlur}
                 required
                 placeholder="Describe the task requirements..."
                 rows={6}
-                error={formErrors.description}
+                error={taskFormik.touched.description ? taskFormik.errors.description : undefined}
               />
             </div>
 
@@ -555,8 +518,8 @@ export default function MentorTasksPage() {
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <label className="label">Assign Interns</label>
-                  {formErrors.assignments && (
-                    <span className="text-xs font-semibold text-error-text">{formErrors.assignments}</span>
+                  {taskFormik.touched.assignedInterns && taskFormik.errors.assignedInterns && (
+                    <span className="text-xs font-semibold text-error-text">{taskFormik.errors.assignedInterns}</span>
                   )}
                 </div>
                 <div className="max-h-56 overflow-y-auto border border-border-default rounded-lg p-4 bg-surface-muted space-y-3">
@@ -570,7 +533,7 @@ export default function MentorTasksPage() {
                       >
                         <input
                           type="checkbox"
-                          checked={formData.assignedInterns.includes(intern.id)}
+                          checked={taskFormik.values.assignedInterns.includes(intern.id)}
                           onChange={() => handleToggleIntern(intern.id)}
                           className="w-4 h-4 rounded border-border-input text-primary focus:ring-border-focus"
                         />
@@ -586,16 +549,18 @@ export default function MentorTasksPage() {
                   label="Deadline"
                   type="date"
                   name="deadline"
-                  value={formData.deadline}
-                  onChange={handleInputChange}
+                  value={taskFormik.values.deadline}
+                  onChange={taskFormik.handleChange}
+                  onBlur={taskFormik.handleBlur}
                   required
-                  error={formErrors.deadline}
+                  error={taskFormik.touched.deadline ? taskFormik.errors.deadline : undefined}
                 />
                 <Select
                   label="Priority"
                   name="priority"
-                  value={formData.priority}
-                  onChange={handleInputChange}
+                  value={taskFormik.values.priority}
+                  onChange={taskFormik.handleChange}
+                  onBlur={taskFormik.handleBlur}
                 >
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
@@ -606,8 +571,9 @@ export default function MentorTasksPage() {
               <Select
                 label="Status"
                 name="status"
-                value={formData.status}
-                onChange={handleInputChange}
+                value={taskFormik.values.status}
+                onChange={taskFormik.handleChange}
+                onBlur={taskFormik.handleBlur}
               >
                 <option value="pending">Pending</option>
                 <option value="in-progress">In Progress</option>
@@ -619,8 +585,8 @@ export default function MentorTasksPage() {
                 <input
                   type="checkbox"
                   name="sendEmail"
-                  checked={formData.sendEmail}
-                  onChange={handleInputChange}
+                  checked={taskFormik.values.sendEmail}
+                  onChange={(e) => taskFormik.setFieldValue("sendEmail", e.target.checked)}
                   className="w-4 h-4 rounded border-border-input text-primary focus:ring-border-focus"
                 />
                 <span className="text-sm font-medium text-content-secondary">Send email notification</span>
@@ -629,10 +595,12 @@ export default function MentorTasksPage() {
           </div>
 
           <div className="flex justify-end gap-3 pt-6 border-t border-border-subtle">
-            <Button type="button" variant="secondary" onClick={() => setIsFormOpen(false)}>
+            <Button type="button" variant="secondary" onClick={() => setIsFormOpen(false)} disabled={taskFormik.isSubmitting}>
               Cancel
             </Button>
-            <Button type="submit">{editingTask ? "Update Task" : "Create Task"}</Button>
+            <Button type="submit" disabled={taskFormik.isSubmitting} loading={taskFormik.isSubmitting} icon={taskFormik.isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : undefined}>
+              {taskFormik.isSubmitting ? "Submitting..." : editingTask ? "Update Task" : "Create Task"}
+            </Button>
           </div>
         </form>
       </Modal>

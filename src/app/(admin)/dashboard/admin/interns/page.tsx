@@ -1,20 +1,21 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useFormik } from "formik";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Modal } from "@/components/ui/Modal";
 import { showToast } from "@/lib/notifications";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Edit3, Trash2, PlusCircle, GraduationCap, Search, ShieldCheck, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
+import { Edit3, Trash2, PlusCircle, GraduationCap, Search, ShieldCheck, ArrowUpDown, ChevronUp, ChevronDown, AlertTriangle, Loader2 } from "lucide-react";
 import { Select } from "@/components/ui/Select";
 import { QuickViewModal } from "@/components/features/QuickViewModal";
 import { ChangePasswordModal } from "@/components/features/ChangePasswordModal";
 import { BulkActionBar } from "@/components/features/BulkActionBar";
 import { Pagination } from "@/components/ui/Pagination";
 import { downloadCSV } from "@/lib/utils/csv-utils";
+import { createInternSchema, graduationDegrees, mapZodErrors } from "@/lib/validations/schemas";
 import Swal from "sweetalert2";
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
 
 interface Intern {
   id: string;
@@ -44,13 +45,21 @@ interface CredentialNotice {
   password: string;
 }
 
-const DEPARTMENTS = ["AI", "ODOO", "JAVA", "MOBILE", "SAP", "QC", "PHP", "RPA"];
+const DEFAULT_DEPARTMENTS = ["AI", "ODOO", "JAVA", "MOBILE", "SAP", "QC", "PHP", "RPA"];
+const initialInternFormValues = {
+  name: "",
+  email: "",
+  phone: "+91 ",
+  department: "AI",
+  mentorId: "",
+  startDate: "",
+  endDate: "",
+  collegeName: "",
+  university: "",
+  graduationDegree: "",
+};
 
 export default function InternsPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const pathname = usePathname();
-
   const [interns, setInterns] = useState<Intern[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [mentors, setMentors] = useState<Mentor[]>([]);
@@ -61,6 +70,7 @@ export default function InternsPage() {
   const [resetPasswordUser, setResetPasswordUser] = useState<{ id: string, name: string } | null>(null);
   const [quickViewEntity, setQuickViewEntity] = useState<{ id: string, type: 'intern' | 'mentor' | 'task' } | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [departments, setDepartments] = useState<string[]>(DEFAULT_DEPARTMENTS);
 
   // Local Pagination & Sorting State (Hidden from URL)
   const [page, setPage] = useState(1);
@@ -80,17 +90,6 @@ export default function InternsPage() {
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
   };
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    phone: "+91 ",
-    department: "AI",
-    mentorId: "",
-    startDate: "",
-    collegeName: "",
-  });
-
   const fetchInterns = useCallback(async () => {
     setLoading(true);
     try {
@@ -123,10 +122,6 @@ export default function InternsPage() {
     fetchInterns();
   }, [fetchInterns]);
 
-  useEffect(() => {
-    fetchMentors();
-  }, []);
-
   const handleFilterChange = (key: string, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }));
     setPage(1); // Reset to first page on filter change
@@ -139,7 +134,7 @@ export default function InternsPage() {
     setPage(1);
   };
 
-  const fetchMentors = async () => {
+  const fetchMentors = useCallback(async () => {
     try {
       const usersRes = await fetch("/api/auth/users");
       if (usersRes.ok) {
@@ -147,7 +142,28 @@ export default function InternsPage() {
         setMentors(data.filter((u: { role: string }) => u.role === "mentor"));
       }
     } catch (e) { console.error(e); }
-  };
+  }, []);
+
+  const fetchDepartments = useCallback(async () => {
+    try {
+      const res = await fetch("/api/departments");
+      if (!res.ok) return;
+      const data: Array<{ name?: string } | string> = await res.json();
+      const names = data
+        .map((dept) => (typeof dept === "string" ? dept : dept?.name))
+        .filter((name): name is string => Boolean(name && name.trim()));
+      if (names.length > 0) {
+        setDepartments(names);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchMentors();
+    fetchDepartments();
+  }, [fetchMentors, fetchDepartments]);
 
   const formatPhoneNumber = (value: string) => {
     // Preserve prefix by default
@@ -165,105 +181,62 @@ export default function InternsPage() {
     return `+91 ${raw.slice(0, 5)} ${raw.slice(5)}`;
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    let newValue = value;
+  const internFormik = useFormik({
+    initialValues: initialInternFormValues,
+    validate: (values) => {
+      const result = createInternSchema(departments).safeParse(values);
+      if (result.success) return {};
+      return mapZodErrors(result.error);
+    },
+    onSubmit: async (values, helpers) => {
+      setCredentialNotice(null);
+      helpers.setSubmitting(true);
 
-    if (name === "phone") {
-      // Prevent deletion of prefix
-      if (!value.startsWith("+91 ")) {
-        newValue = "+91 " + value.replace(/^\+?9?1?\s?/, "");
-      }
-      newValue = formatPhoneNumber(newValue);
-    }
+      try {
+        const url = editingId ? `/api/interns/${editingId}` : "/api/interns";
+        const method = editingId ? "PUT" : "POST";
+        const payload = { ...values, university: values.university || values.collegeName };
 
-    setFormData({ ...formData, [name]: newValue });
-    if (formErrors[name]) {
-      setFormErrors(prev => {
-        const next = { ...prev };
-        delete next[name];
-        return next;
-      });
-    }
-  };
-
-  const validate = () => {
-    const errors: Record<string, string> = {};
-    if (!formData.name.trim()) errors.name = "Full name is required";
-    if (!formData.email.trim()) errors.email = "Email is required";
-    else if (!/\S+@\S+\.\S+/.test(formData.email)) errors.email = "Invalid email format";
-
-    if (formData.phone) {
-      const digits = formData.phone.replace(/\D/g, "");
-      const raw = digits.startsWith("91") ? digits.slice(2) : digits;
-      if (raw.length !== 10) errors.phone = "Phone must be exactly 10 digits";
-    }
-
-    if (!formData.collegeName.trim()) errors.collegeName = "Institution name is required";
-    if (!formData.mentorId) errors.mentorId = "Please assign a mentor";
-    if (!formData.startDate) errors.startDate = "Start date is required";
-
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  /**
-   * Logic: Registration/Update Execution
-   * Handles the persistence layer for intern records. 
-   * Includes post-registration credential generation for new accounts.
-   */
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validate()) return;
-
-    setCredentialNotice(null);
-    setLoading(true);
-
-    try {
-      const url = editingId ? `/api/interns/${editingId}` : "/api/interns";
-      const method = editingId ? "PUT" : "POST";
-      const payload = { ...formData, university: formData.collegeName };
-
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        showToast(err?.error || "Operation failed", "error");
-        return;
-      }
-
-      const data = await res.json();
-      await fetchInterns();
-      setIsFormOpen(false);
-
-      showToast(editingId ? "Profile updated successfully" : "Intern registered successfully", "success");
-
-      setEditingId(null);
-      setFormData({ name: "", email: "", phone: "+91 ", department: "AI", mentorId: "", startDate: "", collegeName: "" });
-      setFormErrors({});
-
-      if (!editingId && data?.credentials) {
-        setCredentialNotice({
-          role: "intern",
-          name: payload.name,
-          email: payload.email,
-          id: data.credentials.id,
-          password: data.credentials.password,
+        const res = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
         });
+
+        if (!res.ok) {
+          const err = await res.json();
+          showToast(err?.error || "Operation failed", "error");
+          return;
+        }
+
+        const data = await res.json();
+        await fetchInterns();
+        setIsFormOpen(false);
+
+        showToast(editingId ? "Profile updated successfully" : "Intern registered successfully", "success");
+
+        setEditingId(null);
+        helpers.resetForm({ values: initialInternFormValues });
+
+        if (!editingId && data?.credentials) {
+          setCredentialNotice({
+            role: "intern",
+            name: payload.name,
+            email: payload.email,
+            id: data.credentials.id,
+            password: data.credentials.password,
+          });
+        }
+      } catch {
+        showToast("A communication error occurred", "error");
+      } finally {
+        helpers.setSubmitting(false);
       }
-    } catch {
-      showToast("A communication error occurred", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+  });
 
   const handleEdit = (intern: Intern) => {
-    setFormData({
+    internFormik.setValues({
       name: intern.name,
       email: intern.email,
       phone: formatPhoneNumber(intern.phone || ""),
@@ -271,8 +244,18 @@ export default function InternsPage() {
       mentorId: intern.mentorId,
       startDate: intern.startDate,
       collegeName: intern.collegeName || intern.university || "",
+      endDate: "",
+      university: intern.university || "",
+      graduationDegree: "",
     });
+    internFormik.setTouched({});
     setEditingId(intern.id);
+    setIsFormOpen(true);
+  };
+
+  const handleOpenCreate = () => {
+    setEditingId(null);
+    internFormik.resetForm({ values: initialInternFormValues });
     setIsFormOpen(true);
   };
 
@@ -381,35 +364,71 @@ export default function InternsPage() {
           title={editingId ? "Update Intern Profile" : "Register New Intern"}
           size="xl"
         >
-          <form onSubmit={handleSubmit} className="space-y-10">
+          <form onSubmit={internFormik.handleSubmit} className="space-y-10">
+            {internFormik.submitCount > 0 && Object.keys(internFormik.errors).length > 0 && (
+              <div className="alert alert-error">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <p className="text-sm font-medium">Please fix the errors below before submitting.</p>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <Input label="Full Name" name="name" value={formData.name} onChange={handleInputChange} required placeholder="Full Name" error={formErrors.name} />
-              <Input label="Email Address" type="email" name="email" value={formData.email} onChange={handleInputChange} required placeholder="email@address.com" error={formErrors.email} />
-              <Input label="Phone Number" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="+91 xxxxx xxxxx" error={formErrors.phone} />
-              <Input label="Educational Institution" name="collegeName" value={formData.collegeName} onChange={handleInputChange} required placeholder="College/University" error={formErrors.collegeName} />
-              <Select label="Assigned Department" name="department" value={formData.department} onChange={handleInputChange} error={formErrors.department}>
-                {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
-              </Select>
-              <Input label="Start Date" type="date" name="startDate" value={formData.startDate} onChange={handleInputChange} error={formErrors.startDate} />
+              <Input label="Full Name" name="name" value={internFormik.values.name} onChange={internFormik.handleChange} onBlur={internFormik.handleBlur} required placeholder="Full Name" error={internFormik.touched.name ? internFormik.errors.name : undefined} />
+              <Input label="Email Address" type="email" name="email" value={internFormik.values.email} onChange={internFormik.handleChange} onBlur={internFormik.handleBlur} required placeholder="email@address.com" error={internFormik.touched.email ? internFormik.errors.email : undefined} />
+              <Input
+                label="Phone Number"
+                name="phone"
+                value={internFormik.values.phone}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  let newValue = value;
+                  if (!value.startsWith("+91 ")) {
+                    newValue = "+91 " + value.replace(/^\+?9?1?\s?/, "");
+                  }
+                  internFormik.setFieldValue("phone", formatPhoneNumber(newValue));
+                }}
+                onBlur={() => internFormik.setFieldTouched("phone", true)}
+                placeholder="+91 xxxxx xxxxx"
+                error={internFormik.touched.phone ? internFormik.errors.phone : undefined}
+              />
+               <Input label="Educational Institution" name="collegeName" value={internFormik.values.collegeName} onChange={internFormik.handleChange} onBlur={internFormik.handleBlur} placeholder="College/University" error={internFormik.touched.collegeName ? internFormik.errors.collegeName : undefined} />
+               <Input label="University" name="university" value={internFormik.values.university} onChange={internFormik.handleChange} onBlur={internFormik.handleBlur} placeholder="University" error={internFormik.touched.university ? internFormik.errors.university : undefined} />
+               <Select label="Graduation Degree" name="graduationDegree" value={internFormik.values.graduationDegree} onChange={internFormik.handleChange} onBlur={internFormik.handleBlur} error={internFormik.touched.graduationDegree ? internFormik.errors.graduationDegree : undefined}>
+                 <option value="">Select degree (optional)</option>
+                 {graduationDegrees.map((degree) => <option key={degree} value={degree}>{degree}</option>)}
+               </Select>
+               <Select label="Assigned Department" name="department" value={internFormik.values.department} onChange={internFormik.handleChange} onBlur={internFormik.handleBlur} error={internFormik.touched.department ? internFormik.errors.department : undefined}>
+                 {departments.map(d => <option key={d} value={d}>{d}</option>)}
+               </Select>
+               <Input label="Start Date" type="date" name="startDate" value={internFormik.values.startDate} onChange={internFormik.handleChange} onBlur={internFormik.handleBlur} error={internFormik.touched.startDate ? internFormik.errors.startDate : undefined} />
+               <Input label="End Date" type="date" name="endDate" value={internFormik.values.endDate} onChange={internFormik.handleChange} onBlur={internFormik.handleBlur} error={internFormik.touched.endDate ? internFormik.errors.endDate : undefined} />
+              {internFormik.values.startDate && new Date(internFormik.values.startDate) < new Date(new Date().setHours(0, 0, 0, 0)) && (
+                <div className="md:col-span-2 alert alert-warning">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <p className="text-sm">Start date is in the past. You can still submit this form.</p>
+                </div>
+              )}
               <div className="md:col-span-2">
                 <Select
                   label="Assign Mentor"
                   name="mentorId"
-                  value={formData.mentorId}
-                  onChange={handleInputChange}
-                  error={formErrors.mentorId}
-                  disabled={!formData.department}
+                  value={internFormik.values.mentorId}
+                  onChange={internFormik.handleChange}
+                  onBlur={internFormik.handleBlur}
+                  error={internFormik.touched.mentorId ? internFormik.errors.mentorId : undefined}
+                  disabled={!internFormik.values.department}
                 >
-                  <option value="">{formData.department ? "Select a Mentor..." : "Please select a department first"}</option>
+                  <option value="">{internFormik.values.department ? "Select a Mentor..." : "Please select a department first"}</option>
                   {mentors
-                    .filter(m => !formData.department || m.department === formData.department)
+                    .filter(m => !internFormik.values.department || m.department === internFormik.values.department)
                     .map(m => <option key={m.id} value={m.id}>{m.name} ({m.department})</option>)}
                 </Select>
               </div>
             </div>
             <div className="flex justify-end gap-3 pt-6 border-t border-border-subtle">
-              <Button type="button" variant="secondary" onClick={() => setIsFormOpen(false)}>Cancel</Button>
-              <Button type="submit">{editingId ? "Update Profile" : "Add Intern"}</Button>
+              <Button type="button" variant="secondary" onClick={() => setIsFormOpen(false)} disabled={internFormik.isSubmitting}>Cancel</Button>
+              <Button type="submit" disabled={internFormik.isSubmitting} loading={internFormik.isSubmitting} icon={internFormik.isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : undefined}>
+                {internFormik.isSubmitting ? "Submitting..." : editingId ? "Update Profile" : "Add Intern"}
+              </Button>
             </div>
           </form>
         </Modal>
@@ -451,7 +470,7 @@ export default function InternsPage() {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => { setEditingId(null); setIsFormOpen(true); }}
+              onClick={handleOpenCreate}
               className="btn btn-primary"
             >
               <PlusCircle className="w-4 h-4" />
@@ -496,7 +515,7 @@ export default function InternsPage() {
                 className="select"
               >
                 <option value="">All Departments</option>
-                {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                {departments.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
 
@@ -526,7 +545,7 @@ export default function InternsPage() {
               <h3 className="empty-state-title">No interns recorded</h3>
               <p className="empty-state-description mb-8">Try adjusting your search criteria or register a new intern to get started.</p>
               <button
-                onClick={() => setIsFormOpen(true)}
+                onClick={handleOpenCreate}
                 className="btn btn-primary"
               >
                 Add First Intern
@@ -566,7 +585,9 @@ export default function InternsPage() {
                           {sortBy === "status" ? (sortOrder === "asc" ? <ChevronUp className="w-3 h-3 text-primary" /> : <ChevronDown className="w-3 h-3 text-primary" />) : <ArrowUpDown className="w-3 h-3 opacity-50" />}
                         </div>
                       </th>
-                      <th className="text-right">Actions</th>
+                      <th className="text-center align-middle">
+                        <div className="flex justify-center w-full">Actions</div>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -622,8 +643,8 @@ export default function InternsPage() {
                           </span>
                         </td>
 
-                        <td className="text-right">
-                          <div className="flex items-center justify-end gap-1">
+                        <td className="text-center">
+                          <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => setResetPasswordUser({ id: intern.id, name: intern.name })}
                               className="btn btn-icon btn-sm btn-ghost"

@@ -5,11 +5,13 @@ import { hasuraMutation, hasuraQuery } from "@/lib/hasura";
 import {
   EXISTING_USER_BY_EMAIL,
   GET_ALL_INTERNS,
+  GET_DEPARTMENTS,
   GET_DEPARTMENT_BY_NAME,
 } from "@/lib/graphql/queries";
 import { CREATE_INTERN_AND_USER } from "@/lib/graphql/mutations";
 import { hash } from "bcryptjs";
 import { sendCredentialsEmail } from "@/lib/email/emailService";
+import { createInternSchema } from "@/lib/validations/schemas";
 
 /**
  * Handle intern data management.
@@ -101,6 +103,24 @@ export async function POST(request: NextRequest) {
     const email = body.email?.toLowerCase().trim();
     if (!email) return NextResponse.json({ error: "Email required" }, { status: 400 });
 
+    const allDepartments = await hasuraQuery<{ departments: { name: string }[] }>(GET_DEPARTMENTS);
+    const departmentNames = (allDepartments.departments || []).map((d) => d.name);
+    const validation = createInternSchema(departmentNames).safeParse({
+      name: body?.name,
+      email,
+      phone: body?.phone,
+      department: body?.department,
+      mentorId: body?.mentorId,
+      startDate: body?.startDate,
+      endDate: body?.endDate,
+      collegeName: body?.collegeName,
+      university: body?.university,
+      graduationDegree: body?.graduationDegree,
+    });
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error.issues[0]?.message || "Invalid intern payload" }, { status: 400 });
+    }
+
     // Check if email already exists
     const existing = await hasuraQuery<{ users: { id: string }[] }>(
       EXISTING_USER_BY_EMAIL,
@@ -109,7 +129,7 @@ export async function POST(request: NextRequest) {
     if (existing.users.length > 0) return NextResponse.json({ error: "Email exists" }, { status: 409 });
 
     // Get department ID from name
-    const deptName = body.department?.toUpperCase() || "AI";
+    const deptName = validation.data.department.toUpperCase();
     const deptData = await hasuraQuery<{ departments: { id: string; name: string }[] }>(
       GET_DEPARTMENT_BY_NAME,
       { name: deptName }
@@ -139,19 +159,19 @@ export async function POST(request: NextRequest) {
       };
     }>(CREATE_INTERN_AND_USER, {
       id: internId,
-      name: body.name,
-      email,
-      password: hashedPassword,
-      role: "intern",
-      departmentId: departmentId,
-      phone: body.phone,
-      mentorId: body.mentorId,
-      startDate: body.startDate,
-      internStatus: "active",
-      collegeName: body.collegeName,
-      university: body.university || body.collegeName,
-      createdByAdmin: session.user.id,
-    });
+        name: validation.data.name,
+        email,
+        password: hashedPassword,
+        role: "intern",
+        departmentId: departmentId,
+        phone: validation.data.phone || null,
+        mentorId: validation.data.mentorId,
+        startDate: validation.data.startDate,
+        internStatus: "active",
+        collegeName: validation.data.collegeName || null,
+        university: validation.data.university || validation.data.collegeName || null,
+        createdByAdmin: session.user.id,
+      });
 
     const newIntern = mapInternRow({
       ...inserted.insert_profiles_one,
@@ -167,7 +187,7 @@ export async function POST(request: NextRequest) {
       const result = await sendCredentialsEmail({
         to: email,
         credentials: { id: internId, password: plainPassword },
-        userInfo: { name: body.name, email },
+        userInfo: { name: validation.data.name, email },
         userType: 'intern',
         includeResetLink: true
       });

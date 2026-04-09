@@ -5,9 +5,10 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Input } from "@/components/ui/Input";
 import { useAppDispatch } from "@/lib/redux/hooks";
 import { addSuccess, addError } from "@/lib/redux/slices/notificationSlice";
-import { ArrowRight, Lock, Mail, Building } from "lucide-react";
+import { ArrowRight, Building, Mail } from "lucide-react";
 
 export default function LoginPage() {
   const [identifier, setIdentifier] = useState("");
@@ -144,25 +145,19 @@ export default function LoginPage() {
 
             <div className="form-group">
               <label className="label" htmlFor="password">Password</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-content-muted" />
-                <input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    if (errors.password) setErrors(prev => ({ ...prev, password: undefined }));
-                  }}
-                  className={`input has-icon-left ${errors.password ? 'border-error' : ''}`}
-                  aria-invalid={!!errors.password}
-                  required
-                />
-              </div>
-              {errors.password && (
-                <span className="form-error">{errors.password}</span>
-              )}
+              <Input
+                id="password"
+                type="password"
+                showPasswordToggle
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (errors.password) setErrors(prev => ({ ...prev, password: undefined }));
+                }}
+                required
+                error={errors.password}
+              />
             </div>
 
             <div className="flex items-center justify-end">

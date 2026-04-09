@@ -5,6 +5,7 @@ import { hasuraMutation, hasuraQuery } from "@/lib/hasura";
 import { GET_ALL_INTERN_IDS, GET_ALL_TASKS, GET_CREATOR_TASKS, GET_INTERN_TASKS, GET_TASK_ASSIGNMENTS_BY_TASK_IDS, GET_USER_BY_ID } from "@/lib/graphql/queries";
 import { CREATE_TASK, INSERT_TASK_ASSIGNMENTS } from "@/lib/graphql/mutations";
 import { getEmailService } from "@/lib/email/emailService";
+import { taskFormSchema } from "@/lib/validations/schemas";
 
 export const dynamic = 'force-dynamic';
 
@@ -98,31 +99,45 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+    const validation = taskFormSchema.safeParse({
+      title: body?.title,
+      description: body?.description ?? "",
+      assignedInterns: Array.isArray(body?.assignedInterns) ? body.assignedInterns : [],
+      assignedToAll: Boolean(body?.assignedToAll),
+      deadline: body?.deadline ?? "",
+      priority: body?.priority,
+      status: body?.status ?? "pending",
+      sendEmail: Boolean(body?.sendEmail),
+    });
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error.issues[0]?.message || "Invalid task payload" }, { status: 400 });
+    }
+    const payload = validation.data;
     const creatorId = session.user.id;
     const taskId = generateId();
 
     // 1. Determine assigned interns
-    let internIds: string[] = Array.isArray(body.assignedInterns) ? body.assignedInterns : [];
-    if (body.assignedToAll) {
+    let internIds: string[] = Array.isArray(payload.assignedInterns) ? payload.assignedInterns : [];
+    if (payload.assignedToAll) {
       const AllData = await hasuraQuery<{ users: { id: string }[] }>(GET_ALL_INTERN_IDS, {});
       internIds = AllData.users.map((i) => i.id);
     } else if (internIds.length === 0 && body.assignedIntern) {
       internIds = [body.assignedIntern];
     }
 
-    if (internIds.length === 0 && !body.assignedToAll) {
+    if (internIds.length === 0 && !payload.assignedToAll) {
       return NextResponse.json({ error: "No interns assigned" }, { status: 400 });
     }
 
     // 2. Create the task
     await hasuraMutation(CREATE_TASK, {
       id: taskId,
-      title: body.title,
-      description: body.description,
+      title: payload.title,
+      description: payload.description || null,
       assignedBy: creatorId,
-      assignedToAll: !!body.assignedToAll,
-      deadline: body.deadline,
-      priority: (body.priority || "medium").toLowerCase(),
+      assignedToAll: !!payload.assignedToAll,
+      deadline: payload.deadline || null,
+      priority: payload.priority.toLowerCase(),
     });
 
     // 3. Create assignments
@@ -133,7 +148,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Send Email Notifications if requested
-    if (body.sendEmail && internIds.length > 0) {
+    if (payload.sendEmail && internIds.length > 0) {
       const emailService = getEmailService();
       // Fetch details for each intern and send email
       Promise.all(internIds.map(async (id) => {
@@ -141,12 +156,12 @@ export async function POST(request: NextRequest) {
           const internData = await hasuraQuery<{ users_by_pk: { email?: string; profile?: { name?: string | null } } | null }>(GET_USER_BY_ID, { id });
           const user = internData.users_by_pk;
           if (user && user.email) {
-            await emailService.sendTaskNotification(
+             await emailService.sendTaskNotification(
               user.email,
               user.profile?.name || "Intern",
-              body.title,
-              body.deadline,
-              body.priority || "medium"
+              payload.title,
+              payload.deadline || "",
+              payload.priority
             );
           }
         } catch (e) {

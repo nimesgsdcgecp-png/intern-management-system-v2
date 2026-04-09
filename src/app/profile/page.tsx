@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useFormik } from "formik";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
@@ -8,7 +9,8 @@ import { Input } from "@/components/ui/Input";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAppDispatch } from "@/lib/redux/hooks";
 import { addSuccess, addError } from "@/lib/redux/slices/notificationSlice";
-import { User, Mail, ShieldCheck, Key, Building2, Save, Loader2, Activity } from "lucide-react";
+import { User, Mail, ShieldCheck, Key, Building2, Save, Loader2, Activity, AlertTriangle } from "lucide-react";
+import { profileEmailSchema, passwordSchema, mapZodErrors } from "@/lib/validations/schemas";
 
 interface UserProfile {
   id: string;
@@ -25,18 +27,6 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Email update state
-  const [email, setEmail] = useState("");
-  const [emailError, setEmailError] = useState("");
-  const [emailLoading, setEmailLoading] = useState(false);
-
-  // Password change state
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [passwordFieldErrors, setPasswordFieldErrors] = useState<{ current?: string; new?: string; confirm?: string }>({});
-  const [passwordLoading, setPasswordLoading] = useState(false);
-
   /**
    * Logic: Get Profile
    * Gets user details from the server.
@@ -48,7 +38,6 @@ export default function ProfilePage() {
 
       if (res.ok) {
         setProfile(data.user);
-        setEmail(data.user.email);
       } else {
         dispatch(addError({
           title: "Profile Error",
@@ -81,134 +70,113 @@ export default function ProfilePage() {
     fetchProfile();
   }, [session, status, router, fetchProfile]);
 
-  const handleEmailUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setEmailError("");
-
-    if (!email) {
-      setEmailError("Email is required");
-      return;
-    }
-    if (!/\S+@\S+\.\S+/.test(email)) {
-      setEmailError("Please enter a valid email address");
-      return;
-    }
-
-    setEmailLoading(true);
-
-    try {
-      const res = await fetch("/api/profile", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "update_email",
-          email,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        dispatch(addSuccess({
-          title: "Email Updated",
-          message: "Your email address has been updated successfully"
-        }));
-        setProfile(prev => prev ? { ...prev, email } : null);
-      } else {
-        setEmailError(data.error || "Failed to update email");
-        dispatch(addError({
-          title: "Update Failed",
-          message: data.error || "Failed to update email"
-        }));
-      }
-    } catch {
-      dispatch(addError({
-        title: "Network Error",
-        message: "Failed to connect to server"
-      }));
-    } finally {
-      setEmailLoading(false);
-    }
-  };
-
-  /**
-   * Logic: Change Password
-   * Updates your password on the server.
-   */
-  const handlePasswordChange = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const newErrors: typeof passwordFieldErrors = {};
-
-    if (!currentPassword) newErrors.current = "Current password is required";
-    if (!newPassword) newErrors.new = "New password is required";
-    else {
-      const requirements = validatePassword(newPassword);
-      if (requirements.length > 0) {
-        newErrors.new = `Missing: ${requirements.join(", ")}`;
-      }
-    }
-    if (newPassword !== confirmPassword) newErrors.confirm = "Passwords do not match";
-
-    if (Object.keys(newErrors).length > 0) {
-      setPasswordFieldErrors(newErrors);
-      return;
-    }
-
-    setPasswordLoading(true);
-    setPasswordFieldErrors({});
-
-    try {
-      const res = await fetch("/api/profile", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "change_password",
-          currentPassword,
-          newPassword,
-          confirmPassword,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        dispatch(addSuccess({
-          title: "Password Changed",
-          message: "Your password has been updated successfully"
-        }));
-        setCurrentPassword("");
-        setNewPassword("");
-        setConfirmPassword("");
-      } else {
-        dispatch(addError({
-          title: "Password Change Failed",
-          message: data.error || "Failed to change password"
-        }));
-        if (data.error?.toLowerCase().includes("current")) {
-          setPasswordFieldErrors({ current: "Incorrect current password" });
-        }
-      }
-    } catch {
-      dispatch(addError({
-        title: "Network Error",
-        message: "Failed to connect to server"
-      }));
-    } finally {
-      setPasswordLoading(false);
-    }
-  };
-
   const validatePassword = (pwd: string) => {
     const errors = [];
     if (pwd.length < 8) errors.push("at least 8 characters");
     if (!/(?=.*[a-z])/.test(pwd)) errors.push("one lowercase letter");
     if (!/(?=.*[A-Z])/.test(pwd)) errors.push("one uppercase letter");
     if (!/(?=.*\d)/.test(pwd)) errors.push("one number");
+    if (!/[@$!%*?&]/.test(pwd)) errors.push("one special character (@$!%*?&)");
     return errors;
   };
+  
+  const emailFormik = useFormik({
+    initialValues: { email: profile?.email || "" },
+    enableReinitialize: true,
+    validate: (values) => {
+      const result = profileEmailSchema(profile?.email).safeParse(values);
+      if (result.success) return {};
+      return mapZodErrors(result.error);
+    },
+    onSubmit: async (values, helpers) => {
+      helpers.setSubmitting(true);
+      try {
+        const res = await fetch("/api/profile", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "update_email",
+            email: values.email,
+          }),
+        });
 
-  const requirements = validatePassword(newPassword);
-  const passwordsMatch = newPassword === confirmPassword;
+        const data = await res.json();
+
+        if (res.ok) {
+          dispatch(addSuccess({
+            title: "Email Updated",
+            message: "Your email address has been updated successfully"
+          }));
+          setProfile(prev => prev ? { ...prev, email: values.email } : null);
+        } else {
+          helpers.setErrors({ email: data.error || "Failed to update email" });
+          dispatch(addError({
+            title: "Update Failed",
+            message: data.error || "Failed to update email"
+          }));
+        }
+      } catch {
+        dispatch(addError({
+          title: "Network Error",
+          message: "Failed to connect to server"
+        }));
+      } finally {
+        helpers.setSubmitting(false);
+      }
+    },
+  });
+
+  const passwordFormik = useFormik({
+    initialValues: { current: "", new: "", confirm: "" },
+    validate: (values) => {
+      const result = passwordSchema.safeParse(values);
+      if (result.success) return {};
+      return mapZodErrors(result.error);
+    },
+    onSubmit: async (values, helpers) => {
+      helpers.setSubmitting(true);
+      try {
+        const res = await fetch("/api/profile", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "change_password",
+            currentPassword: values.current,
+            newPassword: values.new,
+            confirmPassword: values.confirm,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          dispatch(addSuccess({
+            title: "Password Changed",
+            message: "Your password has been updated successfully"
+          }));
+          helpers.resetForm();
+        } else {
+          dispatch(addError({
+            title: "Password Change Failed",
+            message: data.error || "Failed to change password"
+          }));
+          if (data.error?.toLowerCase().includes("current")) {
+            helpers.setErrors({ current: "Incorrect current password" });
+          }
+        }
+      } catch {
+        dispatch(addError({
+          title: "Network Error",
+          message: "Failed to connect to server"
+        }));
+      } finally {
+        helpers.setSubmitting(false);
+      }
+    },
+  });
+
+  const requirements = validatePassword(passwordFormik.values.new);
+  const passwordsMatch = passwordFormik.values.new === passwordFormik.values.confirm;
 
   if (status === "loading" || loading) {
     return (
@@ -291,29 +259,34 @@ export default function ProfilePage() {
                   Update your email address. Changes require verification.
                 </p>
               </div>
-              <form onSubmit={handleEmailUpdate} className="space-y-4">
+              <form onSubmit={emailFormik.handleSubmit} className="space-y-4">
+                {emailFormik.submitCount > 0 && Object.keys(emailFormik.errors).length > 0 && (
+                  <div className="alert alert-error">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <p className="text-xs font-medium">Please fix the errors below before submitting.</p>
+                  </div>
+                )}
                 <Input
                   type="email"
+                  name="email"
                   label="Email Address"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (emailError) setEmailError("");
-                  }}
-                  error={emailError}
+                  value={emailFormik.values.email}
+                  onChange={emailFormik.handleChange}
+                  onBlur={emailFormik.handleBlur}
+                  error={emailFormik.touched.email ? emailFormik.errors.email : undefined}
                   required
-                  disabled={emailLoading}
+                  disabled={emailFormik.isSubmitting}
                 />
 
                 <Button
                   type="submit"
                   variant="secondary"
-                  disabled={emailLoading || email === profile.email}
-                  icon={emailLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  disabled={emailFormik.isSubmitting || emailFormik.values.email === profile.email}
+                  icon={emailFormik.isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   iconPosition="right"
-                  loading={emailLoading}
+                  loading={emailFormik.isSubmitting}
                 >
-                  {emailLoading ? "Updating..." : "Update Email"}
+                  {emailFormik.isSubmitting ? "Updating..." : "Update Email"}
                 </Button>
               </form>
             </div>
@@ -324,47 +297,53 @@ export default function ProfilePage() {
                 <h3 className="text-lg font-semibold text-content-primary">Security</h3>
                 <p className="text-sm text-content-secondary">Change your account password.</p>
               </div>
-              <form onSubmit={handlePasswordChange} className="space-y-6">
+              <form onSubmit={passwordFormik.handleSubmit} className="space-y-6">
+                {passwordFormik.submitCount > 0 && Object.keys(passwordFormik.errors).length > 0 && (
+                  <div className="alert alert-error">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <p className="text-xs font-medium">Please fix the errors below before submitting.</p>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <Input
                     type="password"
+                    showPasswordToggle
+                    name="current"
                     label="Current Password"
-                    value={currentPassword}
-                    onChange={(e) => {
-                      setCurrentPassword(e.target.value);
-                      if (passwordFieldErrors.current) setPasswordFieldErrors((prev) => ({ ...prev, current: undefined }));
-                    }}
-                    error={passwordFieldErrors.current}
+                    value={passwordFormik.values.current}
+                    onChange={passwordFormik.handleChange}
+                    onBlur={passwordFormik.handleBlur}
+                    error={passwordFormik.touched.current ? passwordFormik.errors.current : undefined}
                     required
-                    disabled={passwordLoading}
+                    disabled={passwordFormik.isSubmitting}
                   />
                   <Input
                     type="password"
+                    showPasswordToggle
+                    name="new"
                     label="New Password"
-                    value={newPassword}
-                    onChange={(e) => {
-                      setNewPassword(e.target.value);
-                      if (passwordFieldErrors.new) setPasswordFieldErrors((prev) => ({ ...prev, new: undefined }));
-                    }}
-                    error={passwordFieldErrors.new}
+                    value={passwordFormik.values.new}
+                    onChange={passwordFormik.handleChange}
+                    onBlur={passwordFormik.handleBlur}
+                    error={passwordFormik.touched.new ? passwordFormik.errors.new : undefined}
                     required
-                    disabled={passwordLoading}
+                    disabled={passwordFormik.isSubmitting}
                   />
                   <Input
                     type="password"
+                    showPasswordToggle
+                    name="confirm"
                     label="Confirm Password"
-                    value={confirmPassword}
-                    onChange={(e) => {
-                      setConfirmPassword(e.target.value);
-                      if (passwordFieldErrors.confirm) setPasswordFieldErrors((prev) => ({ ...prev, confirm: undefined }));
-                    }}
-                    error={passwordFieldErrors.confirm}
+                    value={passwordFormik.values.confirm}
+                    onChange={passwordFormik.handleChange}
+                    onBlur={passwordFormik.handleBlur}
+                    error={passwordFormik.touched.confirm ? passwordFormik.errors.confirm : undefined}
                     required
-                    disabled={passwordLoading}
+                    disabled={passwordFormik.isSubmitting}
                   />
                 </div>
 
-                {newPassword && (
+                {passwordFormik.values.new && (
                   <div className="card p-4 bg-surface-muted">
                     <h4 className="text-sm font-semibold text-content-secondary mb-3 uppercase tracking-wide">
                       Password Requirements
@@ -381,7 +360,7 @@ export default function ProfilePage() {
                           All requirements met
                         </span>
                       )}
-                      {confirmPassword && (
+                      {passwordFormik.values.confirm && (
                         <span className={`badge text-xs ${passwordsMatch ? "badge-success" : "badge-error"}`}>
                           {passwordsMatch ? "Passwords match" : "Passwords don't match"}
                         </span>
@@ -393,18 +372,18 @@ export default function ProfilePage() {
                 <Button
                   type="submit"
                   disabled={
-                    passwordLoading ||
-                    !currentPassword ||
-                    !newPassword ||
-                    !confirmPassword ||
+                    passwordFormik.isSubmitting ||
+                    !passwordFormik.values.current ||
+                    !passwordFormik.values.new ||
+                    !passwordFormik.values.confirm ||
                     requirements.length > 0 ||
                     !passwordsMatch
                   }
-                  icon={passwordLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Key className="w-4 h-4" />}
+                  icon={passwordFormik.isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Key className="w-4 h-4" />}
                   iconPosition="right"
-                  loading={passwordLoading}
+                  loading={passwordFormik.isSubmitting}
                 >
-                  {passwordLoading ? "Updating..." : "Update Password"}
+                  {passwordFormik.isSubmitting ? "Updating..." : "Update Password"}
                 </Button>
               </form>
             </div>

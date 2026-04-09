@@ -11,6 +11,7 @@ import {
   UPDATE_TASK_STATUS_BULK,
 } from "@/lib/graphql/mutations";
 import { logActivity } from "@/lib/activityService";
+import { taskFormSchema } from "@/lib/validations/schemas";
 
 
 export async function GET(
@@ -82,14 +83,29 @@ export async function PUT(
         return NextResponse.json({ error: "Interns can only update task status" }, { status: 403 });
       }
     } else if (userRole === "admin" || userRole === "mentor") {
+      const taskValidation = taskFormSchema.safeParse({
+        title: updates?.title ?? task.title,
+        description: updates?.description ?? task.description ?? "",
+        assignedInterns: Array.isArray(updates?.assignedInterns) ? updates.assignedInterns : task.assignedInterns || [],
+        assignedToAll: typeof updates?.assignedToAll === "boolean" ? updates.assignedToAll : task.assignedToAll,
+        deadline: updates?.deadline ?? task.deadline ?? "",
+        priority: updates?.priority ?? task.priority,
+        status: updates?.status ?? task.status,
+        sendEmail: false,
+      });
+      if (!taskValidation.success) {
+        return NextResponse.json({ error: taskValidation.error.issues[0]?.message || "Invalid task update payload" }, { status: 400 });
+      }
+      const safeUpdate = taskValidation.data;
+
       await hasuraMutation(
         UPDATE_TASK_BY_CREATOR,
         {
           id,
-          title: updates?.title ?? task.title,
-          description: updates?.description ?? task.description,
-          deadline: updates?.deadline ?? task.deadline,
-          priority: updates?.priority ?? task.priority,
+          title: safeUpdate.title,
+          description: safeUpdate.description || null,
+          deadline: safeUpdate.deadline || null,
+          priority: safeUpdate.priority,
           assignedToAll:
             typeof updates?.assignedToAll === "boolean"
               ? updates.assignedToAll

@@ -4,6 +4,7 @@ import { hasuraMutation, hasuraQuery } from "@/lib/hasura";
 import { GET_USER_BY_EMAIL, GET_USER_BY_ID } from "@/lib/graphql/queries";
 import { UPDATE_USER_PASSWORD, UPDATE_USER_EMAIL } from "@/lib/graphql/mutations";
 import { hash, compare } from "bcryptjs";
+import { passwordSchema, profileEmailSchema } from "@/lib/validations/schemas";
 
 /**
  * API route for managing user profiles (email and password updates).
@@ -65,27 +66,40 @@ export async function PUT(request: NextRequest) {
     const { action, email, currentPassword, newPassword } = await request.json();
 
     if (action === "update_email") {
-      if (!email) return NextResponse.json({ error: "Email is required" }, { status: 400 });
+      const currentUser = await hasuraQuery<{ users_by_pk: { email: string } | null }>(GET_USER_BY_ID, { id: userId });
+      if (!currentUser.users_by_pk) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-      const existing = await hasuraQuery<{ users: Array<{ id: string }> }>(GET_USER_BY_EMAIL, { email });
+      const emailValidation = profileEmailSchema(currentUser.users_by_pk.email).safeParse({ email });
+      if (!emailValidation.success) {
+        return NextResponse.json({ error: emailValidation.error.issues[0]?.message || "Invalid email" }, { status: 400 });
+      }
+
+      const existing = await hasuraQuery<{ users: Array<{ id: string }> }>(GET_USER_BY_EMAIL, { email: emailValidation.data.email });
       if (existing.users.length > 0 && existing.users[0].id !== userId) {
         return NextResponse.json({ error: "Email already in use" }, { status: 409 });
       }
 
-      await hasuraMutation<void>(UPDATE_USER_EMAIL, { id: userId, email });
+      await hasuraMutation<void>(UPDATE_USER_EMAIL, { id: userId, email: emailValidation.data.email });
       return NextResponse.json({ success: true, message: "Email updated" });
     }
 
     if (action === "change_password") {
-      if (!currentPassword || !newPassword) return NextResponse.json({ error: "Passwords required" }, { status: 400 });
+      const pwdValidation = passwordSchema.safeParse({
+        current: currentPassword,
+        new: newPassword,
+        confirm: newPassword,
+      });
+      if (!pwdValidation.success) {
+        return NextResponse.json({ error: pwdValidation.error.issues[0]?.message || "Invalid password" }, { status: 400 });
+      }
 
       const userData = await hasuraQuery<{ users_by_pk: { password_hash: string } | null }>(GET_USER_BY_ID, { id: userId });
       if (!userData.users_by_pk) return NextResponse.json({ error: "User not found" }, { status: 404 });
       
-      const isMatch = await compare(currentPassword, userData.users_by_pk.password_hash);
+      const isMatch = await compare(pwdValidation.data.current, userData.users_by_pk.password_hash);
       if (!isMatch) return NextResponse.json({ error: "Incorrect current password" }, { status: 400 });
 
-      const hashed = await hash(newPassword, 10);
+      const hashed = await hash(pwdValidation.data.new, 10);
       await hasuraMutation<void>(UPDATE_USER_PASSWORD, { id: userId, passwordHash: hashed });
       return NextResponse.json({ success: true, message: "Password updated" });
     }

@@ -15,7 +15,6 @@ import {
   Search
 } from "lucide-react";
 import { Pagination } from "@/components/ui/Pagination";
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -47,10 +46,6 @@ interface ReportFilters {
 const DEPARTMENTS = ["AI", "ODOO", "JAVA", "MOBILE", "SAP", "QC", "PHP", "RPA"];
 
 export default function AdminReportsPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const pathname = usePathname();
-
   const [reports, setReports] = useState<Report[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [internMap, setInternMap] = useState<Map<string, Intern>>(new Map());

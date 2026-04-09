@@ -11,6 +11,7 @@ import {
 import { CREATE_USER, CREATE_MENTOR_AND_USER, UPDATE_USER_PASSWORD } from "@/lib/graphql/mutations";
 import { hash } from "bcryptjs";
 import { sendCredentialsEmail } from "@/lib/email/emailService";
+import { adminResetPasswordSchema, createMentorSchema } from "@/lib/validations/schemas";
 
 const DEPARTMENTS = ["AI", "ODOO", "JAVA", "MOBILE", "SAP", "QC", "PHP", "RPA"];
 
@@ -100,6 +101,22 @@ export async function POST(request: NextRequest) {
         { error: "Invalid department" },
         { status: 400 }
       );
+    }
+
+    if (role === "mentor") {
+      const mentorValidation = createMentorSchema(DEPARTMENTS).safeParse({
+        name,
+        email,
+        department,
+        phone,
+        role: "mentor",
+      });
+      if (!mentorValidation.success) {
+        return NextResponse.json(
+          { error: mentorValidation.error.issues[0]?.message || "Invalid mentor payload" },
+          { status: 400 }
+        );
+      }
     }
 
     // Get department ID from name
@@ -280,14 +297,18 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    if (newPassword.length < 6) {
+    const validation = adminResetPasswordSchema.safeParse({
+      password: newPassword,
+      confirmPassword: newPassword,
+    });
+    if (!validation.success) {
       return NextResponse.json(
-        { error: "Password must be at least 6 characters long" },
+        { error: validation.error.issues[0]?.message || "Invalid password" },
         { status: 400 }
       );
     }
 
-    const hashedPassword = await hash(newPassword, 10);
+    const hashedPassword = await hash(validation.data.password, 10);
 
     await hasuraMutation<void>(UPDATE_USER_PASSWORD, {
       id: userId,

@@ -58,7 +58,6 @@ export async function POST(request: NextRequest) {
     const user = session.user as { id: string; role: string; department?: string; departmentId?: string };
     const role = user.role;
     const userId = user.id;
-    const userDept = user.department;
 
     if (role === "intern") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });

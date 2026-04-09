@@ -13,7 +13,6 @@ import { Modal } from "@/components/ui/Modal";
 import { QuickViewModal } from "@/components/features/QuickViewModal";
 import { Pagination } from "@/components/ui/Pagination";
 import { showToast } from "@/lib/notifications";
-import Swal from "sweetalert2";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 
 interface Task {

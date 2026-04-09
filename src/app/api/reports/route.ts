@@ -7,6 +7,7 @@ import {
   GET_MENTOR_INTERN_IDS,
 } from "@/lib/graphql/queries";
 import { CREATE_REPORT } from "@/lib/graphql/mutations";
+import { submitReportSchema } from "@/lib/validations/schemas";
 
 /**
  * Handle report submissions and retrieval.
@@ -84,12 +85,26 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+    const validation = submitReportSchema.safeParse({
+      date: body?.date,
+      workDescription: body?.workDescription,
+      hoursWorked: body?.hoursWorked,
+      title: "",
+      tasksCompleted: "",
+      challengesFaced: "",
+    });
+
+    if (!validation.success) {
+      const firstIssue = validation.error.issues[0];
+      return NextResponse.json({ error: firstIssue?.message || "Invalid report payload" }, { status: 400 });
+    }
+
     const inserted = await hasuraMutation<{ insert_reports_one: ReportRow }>(CREATE_REPORT, {
       id: generateId(),
       internId: session.user.id,
-      reportDate: body.date,
-      workDescription: body.workDescription,
-      hoursWorked: Number(body.hoursWorked || 0),
+      reportDate: validation.data.date,
+      workDescription: validation.data.workDescription,
+      hoursWorked: validation.data.hoursWorked,
     });
 
     return NextResponse.json(mapReport(inserted.insert_reports_one), { status: 201 });
