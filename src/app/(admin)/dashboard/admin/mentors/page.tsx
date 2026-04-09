@@ -417,7 +417,7 @@ export default function AdminMentorsPage() {
                                 onChange={() => toggleSelectRow(mentor.id)}
                               />
                             </td>
-                            <td className="min-w-[200px]">
+                            <td className="min-w-50">
                               <div className="flex items-center gap-3">
                                 <div className="avatar avatar-md">
                                   {mentor.name[0]}

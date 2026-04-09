@@ -546,7 +546,7 @@ export default function InternsPage() {
                           onChange={toggleSelectAll}
                         />
                       </th>
-                      <th className="cursor-pointer min-w-[220px]" onClick={() => handleSort("name")} aria-sort={sortBy === "name" ? (sortOrder as "ascending" | "descending") : undefined}>
+                      <th className="cursor-pointer min-w-55" onClick={() => handleSort("name")} aria-sort={sortBy === "name" ? (sortOrder as "ascending" | "descending") : undefined}>
                         <div className="flex items-center gap-2">
                           Intern Details
                           {sortBy === "name" ? (sortOrder === "asc" ? <ChevronUp className="w-3 h-3 text-primary" /> : <ChevronDown className="w-3 h-3 text-primary" />) : <ArrowUpDown className="w-3 h-3 opacity-50" />}
@@ -584,7 +584,7 @@ export default function InternsPage() {
                           />
                         </td>
 
-                        <td className="min-w-[200px]">
+                        <td className="min-w-50">
                           <div className="flex items-center gap-3">
                             <div className="avatar avatar-md cursor-pointer" onClick={() => setQuickViewEntity({ id: intern.id, type: 'intern' })}>
                               {intern.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}

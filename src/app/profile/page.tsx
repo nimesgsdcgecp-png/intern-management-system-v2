@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -226,199 +228,197 @@ export default function ProfilePage() {
 
   return (
     <DashboardLayout>
-      <div className="page-content">
-        {/* Header Section */}
-        <header className="page-header">
+      <div className="space-y-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-content-primary">Profile Settings</h1>
-            <p className="text-content-muted mt-1">Manage your account information and security</p>
+            <h1 className="text-2xl font-bold text-content-primary">My Profile</h1>
+            <p className="text-sm text-content-secondary mt-1">
+              Manage your account settings and information
+            </p>
           </div>
           <div className="badge badge-primary">
             <ShieldCheck className="w-4 h-4" />
             Verified Account
           </div>
-        </header>
+        </div>
 
-        <div className="section">
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-            <div className="xl:col-span-2 space-y-8">
-              {/* Identity Profile */}
-              <div className="card p-8">
-                <div className="p-8 bg-primary-subtle rounded-lg mb-8">
-                  <div className="flex flex-col md:flex-row items-center gap-6">
-                    <div className="w-20 h-20 rounded-lg bg-surface-card flex items-center justify-center">
-                      <User className="w-10 h-10 text-primary-text" />
-                    </div>
-                    <div className="text-center md:text-left">
-                      <h2 className="text-2xl font-bold text-content-primary mb-2">{profile.name}</h2>
-                      <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
-                        <span className="badge badge-neutral">
-                          ID: {profile.id}
-                        </span>
-                        <span className="badge badge-primary">
-                          {profile.role}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="card p-6">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Building2 className="w-4 h-4 text-primary-text" />
-                      <h3 className="text-sm font-semibold text-content-secondary uppercase tracking-wide">Department</h3>
-                    </div>
-                    <p className="text-lg font-semibold text-content-primary">{profile.department || "Organization Wide"}</p>
-                  </div>
-                  
-                  <div className="card p-6">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Mail className="w-4 h-4 text-primary-text" />
-                      <h3 className="text-sm font-semibold text-content-secondary uppercase tracking-wide">Email</h3>
-                    </div>
-                    <p className="text-lg font-semibold text-content-primary">{profile.email}</p>
-                  </div>
-                </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Profile Card */}
+          <div className="card p-6 space-y-6">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-lg bg-surface-muted flex items-center justify-center text-lg font-bold text-content-primary">
+                {profile.name
+                  .split(" ")
+                  .map((n) => n[0])
+                  .join("")
+                  .slice(0, 2)
+                  .toUpperCase()}
               </div>
-
-              {/* Change Password */}
-              <div className="space-y-4">
-                <h2 className="text-xl font-bold text-content-primary">Change Password</h2>
-                <div className="card p-8">
-                  <form onSubmit={handlePasswordChange} className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <Input
-                        type="password"
-                        label="Current Password"
-                        value={currentPassword}
-                        onChange={(e) => {
-                          setCurrentPassword(e.target.value);
-                          if (passwordFieldErrors.current) setPasswordFieldErrors(prev => ({ ...prev, current: undefined }));
-                        }}
-                        error={passwordFieldErrors.current}
-                        required
-                        disabled={passwordLoading}
-                      />
-                      <Input
-                        type="password"
-                        label="New Password"
-                        value={newPassword}
-                        onChange={(e) => {
-                          setNewPassword(e.target.value);
-                          if (passwordFieldErrors.new) setPasswordFieldErrors(prev => ({ ...prev, new: undefined }));
-                        }}
-                        error={passwordFieldErrors.new}
-                        required
-                        disabled={passwordLoading}
-                      />
-                      <Input
-                        type="password"
-                        label="Confirm Password"
-                        value={confirmPassword}
-                        onChange={(e) => {
-                          setConfirmPassword(e.target.value);
-                          if (passwordFieldErrors.confirm) setPasswordFieldErrors(prev => ({ ...prev, confirm: undefined }));
-                        }}
-                        error={passwordFieldErrors.confirm}
-                        required
-                        disabled={passwordLoading}
-                      />
-                    </div>
-
-                    {newPassword && (
-                      <div className="card p-4 bg-surface-muted">
-                        <h4 className="text-sm font-semibold text-content-secondary mb-3 uppercase tracking-wide">Password Requirements</h4>
-                        <div className="flex flex-wrap gap-2">
-                          {requirements.map((error: string, index: number) => (
-                            <span key={index} className="badge badge-error text-xs">
-                              Missing: {error}
-                            </span>
-                          ))}
-                          {requirements.length === 0 && (
-                            <span className="badge badge-success text-xs">
-                              <ShieldCheck className="w-3 h-3" />
-                              All requirements met
-                            </span>
-                          )}
-                          {confirmPassword && (
-                            <span className={`badge text-xs ${passwordsMatch ? 'badge-success' : 'badge-error'}`}>
-                              {passwordsMatch ? "Passwords match" : "Passwords don't match"}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    <Button
-                      type="submit"
-                      className="w-full"
-                      disabled={
-                        passwordLoading ||
-                        !currentPassword ||
-                        !newPassword ||
-                        !confirmPassword ||
-                        requirements.length > 0 ||
-                        !passwordsMatch
-                      }
-                      icon={passwordLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Key className="w-4 h-4" />}
-                      iconPosition="right"
-                      loading={passwordLoading}
-                    >
-                      {passwordLoading ? "Updating..." : "Update Password"}
-                    </Button>
-                  </form>
-                </div>
+              <div>
+                <h2 className="text-xl font-bold text-content-primary">{profile.name}</h2>
+                <p className="text-sm text-content-secondary">{profile.email}</p>
               </div>
             </div>
 
-            <div className="space-y-8">
-              {/* Update Email */}
-              <div className="space-y-4">
-                <h2 className="text-xl font-bold text-content-primary">Email Settings</h2>
-                <div className="card p-6">
-                  <form onSubmit={handleEmailUpdate} className="space-y-4">
-                    <Input
-                      type="email"
-                      label="Email Address"
-                      value={email}
-                      onChange={(e) => {
-                        setEmail(e.target.value);
-                        if (emailError) setEmailError("");
-                      }}
-                      error={emailError}
-                      required
-                      disabled={emailLoading}
-                    />
+            <div className="flex flex-wrap gap-2">
+              <span className="badge badge-primary">{profile.role}</span>
+              <span className="badge badge-neutral">{profile.department || "Organization Wide"}</span>
+            </div>
 
-                    <Button
-                      type="submit"
-                      variant="secondary"
-                      className="w-full"
-                      disabled={emailLoading || email === profile.email}
-                      icon={emailLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                      iconPosition="right"
-                      loading={emailLoading}
-                    >
-                      {emailLoading ? "Updating..." : "Update Email"}
-                    </Button>
-                  </form>
-                </div>
+            <div className="space-y-3 text-sm text-content-secondary">
+              <div className="flex items-center gap-2">
+                <User className="w-4 h-4 text-content-muted" />
+                <span>User ID: {profile.id}</span>
               </div>
+              <div className="flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-content-muted" />
+                <span>Department: {profile.department || "N/A"}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Mail className="w-4 h-4 text-content-muted" />
+                <span>Email: {profile.email}</span>
+              </div>
+            </div>
+          </div>
 
-              {/* Status Card */}
-              <div className="card p-6 bg-primary-subtle">
-                <div className="flex items-center gap-3 mb-4">
-                  <Activity className="w-5 h-5 text-primary-text" />
-                  <h3 className="text-lg font-bold text-primary-text">Account Status</h3>
-                </div>
-                <p className="text-content-secondary mb-4">
-                  Your profile is active and all changes are saved automatically.
+          {/* Settings */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* Personal Information */}
+            <div className="card p-6 space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold text-content-primary">Personal Information</h3>
+                <p className="text-sm text-content-secondary">
+                  Update your email address. Changes require verification.
                 </p>
-                <div className="badge badge-success w-full justify-center">
-                  Status: Active
-                </div>
               </div>
+              <form onSubmit={handleEmailUpdate} className="space-y-4">
+                <Input
+                  type="email"
+                  label="Email Address"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (emailError) setEmailError("");
+                  }}
+                  error={emailError}
+                  required
+                  disabled={emailLoading}
+                />
+
+                <Button
+                  type="submit"
+                  variant="secondary"
+                  disabled={emailLoading || email === profile.email}
+                  icon={emailLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  iconPosition="right"
+                  loading={emailLoading}
+                >
+                  {emailLoading ? "Updating..." : "Update Email"}
+                </Button>
+              </form>
+            </div>
+
+            {/* Security */}
+            <div className="card p-6 space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold text-content-primary">Security</h3>
+                <p className="text-sm text-content-secondary">Change your account password.</p>
+              </div>
+              <form onSubmit={handlePasswordChange} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Input
+                    type="password"
+                    label="Current Password"
+                    value={currentPassword}
+                    onChange={(e) => {
+                      setCurrentPassword(e.target.value);
+                      if (passwordFieldErrors.current) setPasswordFieldErrors((prev) => ({ ...prev, current: undefined }));
+                    }}
+                    error={passwordFieldErrors.current}
+                    required
+                    disabled={passwordLoading}
+                  />
+                  <Input
+                    type="password"
+                    label="New Password"
+                    value={newPassword}
+                    onChange={(e) => {
+                      setNewPassword(e.target.value);
+                      if (passwordFieldErrors.new) setPasswordFieldErrors((prev) => ({ ...prev, new: undefined }));
+                    }}
+                    error={passwordFieldErrors.new}
+                    required
+                    disabled={passwordLoading}
+                  />
+                  <Input
+                    type="password"
+                    label="Confirm Password"
+                    value={confirmPassword}
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value);
+                      if (passwordFieldErrors.confirm) setPasswordFieldErrors((prev) => ({ ...prev, confirm: undefined }));
+                    }}
+                    error={passwordFieldErrors.confirm}
+                    required
+                    disabled={passwordLoading}
+                  />
+                </div>
+
+                {newPassword && (
+                  <div className="card p-4 bg-surface-muted">
+                    <h4 className="text-sm font-semibold text-content-secondary mb-3 uppercase tracking-wide">
+                      Password Requirements
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {requirements.map((error: string, index: number) => (
+                        <span key={index} className="badge badge-error text-xs">
+                          Missing: {error}
+                        </span>
+                      ))}
+                      {requirements.length === 0 && (
+                        <span className="badge badge-success text-xs">
+                          <ShieldCheck className="w-3 h-3" />
+                          All requirements met
+                        </span>
+                      )}
+                      {confirmPassword && (
+                        <span className={`badge text-xs ${passwordsMatch ? "badge-success" : "badge-error"}`}>
+                          {passwordsMatch ? "Passwords match" : "Passwords don't match"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <Button
+                  type="submit"
+                  disabled={
+                    passwordLoading ||
+                    !currentPassword ||
+                    !newPassword ||
+                    !confirmPassword ||
+                    requirements.length > 0 ||
+                    !passwordsMatch
+                  }
+                  icon={passwordLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Key className="w-4 h-4" />}
+                  iconPosition="right"
+                  loading={passwordLoading}
+                >
+                  {passwordLoading ? "Updating..." : "Update Password"}
+                </Button>
+              </form>
+            </div>
+
+            {/* Account Status */}
+            <div className="card p-6 bg-primary-subtle">
+              <div className="flex items-center gap-3 mb-4">
+                <Activity className="w-5 h-5 text-primary-text" />
+                <h3 className="text-lg font-bold text-primary-text">Account Status</h3>
+              </div>
+              <p className="text-content-secondary mb-4">
+                Your profile is active and all changes are saved automatically.
+              </p>
+              <div className="badge badge-success w-full justify-center">Status: Active</div>
             </div>
           </div>
         </div>

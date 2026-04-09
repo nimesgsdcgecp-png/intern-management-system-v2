@@ -61,7 +61,35 @@ export default function LoginPage() {
           title: "Success",
           message: "Welcome back."
         }));
-        router.push("/dashboard");
+        
+        // Get the callback URL from query params (set by middleware)
+        const params = new URLSearchParams(window.location.search);
+        const callbackUrl = params.get('callbackUrl');
+        
+        if (callbackUrl) {
+          // Redirect to the originally requested page
+          router.push(callbackUrl);
+        } else {
+          // Fetch session to get user role and redirect to appropriate dashboard
+          const response = await fetch('/api/auth/session');
+          const session = await response.json();
+          const userRole = session?.user?.role;
+          
+          // Redirect based on role
+          switch (userRole) {
+            case 'admin':
+              router.push('/dashboard/admin');
+              break;
+            case 'mentor':
+              router.push('/dashboard/mentor');
+              break;
+            case 'intern':
+              router.push('/dashboard/intern');
+              break;
+            default:
+              router.push('/dashboard/admin'); // fallback
+          }
+        }
       }
     } catch {
       dispatch(addError({

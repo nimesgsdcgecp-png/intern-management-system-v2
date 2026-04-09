@@ -70,7 +70,10 @@ export async function GET(request: NextRequest) {
       orderBy = { [sortBy]: sortOrder };
     }
 
-    const data = await hasuraQuery(GET_ALL_INTERNS, {
+    const data = await hasuraQuery<{
+      items: Record<string, unknown>[];
+      meta: { aggregate: { count: number } };
+    }>(GET_ALL_INTERNS, {
       limit: pageSize,
       offset,
       order_by: [orderBy],
@@ -99,12 +102,18 @@ export async function POST(request: NextRequest) {
     if (!email) return NextResponse.json({ error: "Email required" }, { status: 400 });
 
     // Check if email already exists
-    const existing = await hasuraQuery(EXISTING_USER_BY_EMAIL, { email });
+    const existing = await hasuraQuery<{ users: { id: string }[] }>(
+      EXISTING_USER_BY_EMAIL,
+      { email }
+    );
     if (existing.users.length > 0) return NextResponse.json({ error: "Email exists" }, { status: 409 });
 
     // Get department ID from name
     const deptName = body.department?.toUpperCase() || "AI";
-    const deptData = await hasuraQuery(GET_DEPARTMENT_BY_NAME, { name: deptName });
+    const deptData = await hasuraQuery<{ departments: { id: string; name: string }[] }>(
+      GET_DEPARTMENT_BY_NAME,
+      { name: deptName }
+    );
     if (!deptData.departments || deptData.departments.length === 0) {
       return NextResponse.json({ error: "Department not found" }, { status: 400 });
     }
@@ -116,7 +125,19 @@ export async function POST(request: NextRequest) {
     const internId = generateId();
 
     // Create Intern & User in a single mutation
-    const inserted = await hasuraMutation(CREATE_INTERN_AND_USER, {
+    const inserted = await hasuraMutation<{
+      insert_profiles_one: { user_id: string; name: string; phone: string | null };
+      insert_interns_one: {
+        user_id: string;
+        mentor_id: string;
+        created_by_admin: string;
+        start_date: string | null;
+        end_date: string | null;
+        status: string;
+        college_name: string | null;
+        university: string | null;
+      };
+    }>(CREATE_INTERN_AND_USER, {
       id: internId,
       name: body.name,
       email,

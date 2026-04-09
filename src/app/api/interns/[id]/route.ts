@@ -56,7 +56,10 @@ export async function PUT(
     // Get department ID if department name is provided
     let departmentId = existing.departmentId;
     if (updates?.department && updates.department !== existing.department) {
-      const deptData = await hasuraQuery(GET_DEPARTMENT_BY_NAME, { name: updates.department.toUpperCase() });
+      const deptData = await hasuraQuery<{ departments: { id: string; name: string }[] }>(
+        GET_DEPARTMENT_BY_NAME,
+        { name: updates.department.toUpperCase() }
+      );
       if (deptData.departments && deptData.departments.length > 0) {
         departmentId = deptData.departments[0].id;
       }

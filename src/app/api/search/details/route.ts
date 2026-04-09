@@ -32,25 +32,33 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    let data;
     switch (type) {
       case "intern":
-        data = await hasuraQuery(GET_INTERN_BY_ID, { id });
+        const internData = await hasuraQuery<{ users_by_pk: Record<string, unknown> | null }>(
+          GET_INTERN_BY_ID,
+          { id }
+        );
         return NextResponse.json({ 
           type: "intern",
-          data: transformUserData(data?.users_by_pk as Record<string, unknown>) 
+          data: transformUserData(internData.users_by_pk || {}) 
         });
       case "mentor":
-        data = await hasuraQuery(GET_MENTOR_BY_ID, { id });
+        const mentorData = await hasuraQuery<{ users_by_pk: Record<string, unknown> | null }>(
+          GET_MENTOR_BY_ID,
+          { id }
+        );
         return NextResponse.json({ 
           type: "mentor",
-          data: transformUserData(data?.users_by_pk as Record<string, unknown>) 
+          data: transformUserData(mentorData.users_by_pk || {}) 
         });
       case "task":
-        data = await hasuraQuery(GET_TASK_BY_ID, { id });
+        const taskData = await hasuraQuery<{ tasks_by_pk: Record<string, unknown> | null }>(
+          GET_TASK_BY_ID,
+          { id }
+        );
         return NextResponse.json({ 
           type: "task",
-          data: data?.tasks_by_pk 
+          data: taskData.tasks_by_pk 
         });
       default:
         return NextResponse.json({ error: "Invalid type" }, { status: 400 });

@@ -6,7 +6,7 @@ export default function InternLayout({
   children: React.ReactNode;
 }) {
   return (
-    <RoleGuard allowedRoles={["INTERN"]}>
+    <RoleGuard allowedRoles={["intern"]}>
       {children}
     </RoleGuard>
   );

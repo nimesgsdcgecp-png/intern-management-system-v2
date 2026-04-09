@@ -8,6 +8,8 @@ interface AttendanceTableProps {
   mode?: "personal" | "all";
   date?: string;
   department?: string;
+  month?: number;
+  year?: number;
   page?: number;
   pageSize?: number;
   onPageChange?: (page: number) => void;
@@ -36,6 +38,8 @@ export function AttendanceTable({
   mode = "all", 
   date = new Date().toISOString().split('T')[0],
   department = "",
+  month,
+  year,
   page = 1,
   pageSize = 10,
   onPageChange,
@@ -59,6 +63,10 @@ export function AttendanceTable({
         if (department) params.set("department", department);
       } else {
         params.set("history", "true");
+        if (month && year) {
+          params.set("month", month.toString());
+          params.set("year", year.toString());
+        }
       }
       
       const response = await fetch(`/api/attendance?${params.toString()}`);
@@ -91,7 +99,7 @@ export function AttendanceTable({
     } finally {
       setLoading(false);
     }
-  }, [mode, date, department, page, pageSize]);
+  }, [mode, date, department, month, year, page, pageSize]);
 
   useEffect(() => {
     fetchLogs();

@@ -19,6 +19,10 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get("page") || "1");
     const pageSize = parseInt(searchParams.get("pageSize") || "10");
     const offset = (page - 1) * pageSize;
+    const monthParam = searchParams.get("month");
+    const yearParam = searchParams.get("year");
+    const month = monthParam ? parseInt(monthParam) : null;
+    const year = yearParam ? parseInt(yearParam) : null;
 
     const isAdminOrMentor = ["admin", "mentor"].includes((session.user as { role: string }).role);
 
@@ -109,6 +113,13 @@ export async function GET(request: NextRequest) {
     
     // For personal history view (not fetchAll)
     if (searchParams.get("history") === "true") {
+      const conditions: Record<string, unknown>[] = [{ user_id: { _eq: targetUserId } }];
+      if (month && year) {
+        const startDate = new Date(year, month - 1, 1).toISOString().split("T")[0];
+        const endDate = new Date(year, month, 0).toISOString().split("T")[0];
+        conditions.push({ date: { _gte: startDate, _lte: endDate } });
+      }
+
       const data = await hasuraQuery<{ 
         attendance: {
           id: string;
@@ -120,8 +131,8 @@ export async function GET(request: NextRequest) {
         }[], 
         attendance_aggregate: { aggregate: { count: number } } 
       }>(`
-        query GetUserAttendanceHistory($userId: uuid!, $limit: Int, $offset: Int) {
-          attendance(where: {user_id: {_eq: $userId}}, order_by: {date: desc}, limit: $limit, offset: $offset) {
+        query GetUserAttendanceHistory($where: attendance_bool_exp, $limit: Int, $offset: Int) {
+          attendance(where: $where, order_by: {date: desc}, limit: $limit, offset: $offset) {
             id
             date
             clock_in
@@ -129,13 +140,13 @@ export async function GET(request: NextRequest) {
             status
             total_hours
           }
-          attendance_aggregate(where: {user_id: {_eq: $userId}}) {
+          attendance_aggregate(where: $where) {
             aggregate {
               count
             }
           }
         }
-      `, { userId: targetUserId, limit: pageSize, offset });
+      `, { where: { _and: conditions }, limit: pageSize, offset });
 
       return NextResponse.json({
         items: data.attendance || [],

@@ -6,7 +6,7 @@ export default function MentorLayout({
   children: React.ReactNode;
 }) {
   return (
-    <RoleGuard allowedRoles={["MENTOR"]}>
+    <RoleGuard allowedRoles={["mentor"]}>
       {children}
     </RoleGuard>
   );

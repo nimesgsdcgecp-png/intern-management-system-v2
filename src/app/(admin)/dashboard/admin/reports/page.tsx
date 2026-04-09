@@ -378,7 +378,7 @@ export default function AdminReportsPage() {
                       return (
                         <Fragment key={report.id}>
                           <tr>
-                            <td className="min-w-[250px]">
+                            <td className="min-w-62.5">
                               <div className="flex items-center gap-4">
                                 <div className="avatar avatar-md font-bold">
                                   {intern.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
@@ -432,7 +432,7 @@ export default function AdminReportsPage() {
                                         <FileText className="w-4 h-4 text-primary" /> Work Description
                                       </h4>
                                     </div>
-                                    <div className="card p-8 min-h-[140px] relative overflow-hidden">
+                                    <div className="card p-8 min-h-35 relative overflow-hidden">
                                       <div className="absolute top-0 left-0 w-1.5 h-full bg-primary opacity-20" />
                                       <p className="text-sm text-content-primary leading-relaxed font-medium relative z-10">
                                         &quot;{report.workDescription || "No detailed logs synthesized."}&quot;
@@ -445,7 +445,7 @@ export default function AdminReportsPage() {
                                         <AlertCircle className="w-4 h-4 text-success" /> Mentor Feedback
                                       </h4>
                                     </div>
-                                    <div className={`card p-8 min-h-[140px] relative overflow-hidden ${
+                                    <div className={`card p-8 min-h-35 relative overflow-hidden ${
                                         report.mentorFeedback ? "bg-success-subtle" : "bg-warning-subtle"
                                       }`}>
                                       <div className={`absolute top-0 left-0 w-1.5 h-full opacity-30 ${report.mentorFeedback ? 'bg-success' : 'bg-warning'}`} />
