@@ -1,20 +1,23 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useFormik } from "formik";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { 
   Users, Search, Mail, 
-  Phone, Trash2, Edit3, 
-  PlusCircle, Grid, List,
+  Phone, Trash2, Edit3, ShieldCheck, 
+  PlusCircle, Grid, List, AlertTriangle, Loader2,
   ArrowUpDown, ChevronUp, ChevronDown
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { showToast } from "@/lib/notifications";
 import { Pagination } from "@/components/ui/Pagination";
 import { BulkActionBar } from "@/components/features/BulkActionBar";
+import { QuickViewModal } from "@/components/features/QuickViewModal";
+import { ChangePasswordModal } from "@/components/features/ChangePasswordModal";
 import { downloadCSV } from "@/lib/utils/csv-utils";
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { createMentorSchema, mapZodErrors } from "@/lib/validations/schemas";
 import Swal from "sweetalert2";
 
 interface Mentor {
@@ -26,13 +29,16 @@ interface Mentor {
   status?: string;
 }
 
-const DEPARTMENTS = ["AI", "ODOO", "JAVA", "MOBILE", "SAP", "QC", "PHP", "RPA"];
+const DEFAULT_DEPARTMENTS = ["AI", "ODOO", "JAVA", "MOBILE", "SAP", "QC", "PHP", "RPA"];
+const initialMentorValues = {
+  name: "",
+  email: "",
+  department: "AI",
+  phone: "+91 ",
+  role: "mentor" as const,
+};
 
 export default function AdminMentorsPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const pathname = usePathname();
-
   const [mentors, setMentors] = useState<Mentor[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -40,15 +46,10 @@ export default function AdminMentorsPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [selectedMentorId, setSelectedMentorId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [resetPasswordUser, setResetPasswordUser] = useState<{ id: string; name: string } | null>(null);
+  const [quickViewEntity, setQuickViewEntity] = useState<{ id: string; type: "intern" | "mentor" | "task" } | null>(null);
+  const [departments, setDepartments] = useState<string[]>(DEFAULT_DEPARTMENTS);
   
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    department: "AI",
-    phone: "",
-    role: "mentor"
-  });
-
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState("");
@@ -85,9 +86,33 @@ export default function AdminMentorsPage() {
     fetchData();
   }, [fetchData]);
 
-  const handleCreateOrUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      try {
+        const res = await fetch("/api/departments");
+        if (!res.ok) return;
+        const data: Array<{ name?: string } | string> = await res.json();
+        const names = data
+          .map((dept) => (typeof dept === "string" ? dept : dept?.name))
+          .filter((name): name is string => Boolean(name && name.trim()));
+        if (names.length > 0) setDepartments(names);
+      } catch {
+        // no-op
+      }
+    };
+    fetchDepartments();
+  }, []);
+
+  const mentorFormik = useFormik({
+    initialValues: initialMentorValues,
+    validate: (values) => {
+      const result = createMentorSchema(departments).safeParse(values);
+      if (result.success) return {};
+      return mapZodErrors(result.error);
+    },
+    onSubmit: async (values, helpers) => {
+      helpers.setSubmitting(true);
+      try {
       const url = isEditing 
         ? `/api/mentors/${selectedMentorId}` 
         : "/api/auth/users";
@@ -97,12 +122,15 @@ export default function AdminMentorsPage() {
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(values),
       });
 
       if (res.ok) {
         showToast(isEditing ? "Updated" : "Account Created", "success");
         setIsModalOpen(false);
+        helpers.resetForm({ values: initialMentorValues });
+        setIsEditing(false);
+        setSelectedMentorId(null);
         fetchData();
       } else {
         const err = await res.json();
@@ -110,7 +138,23 @@ export default function AdminMentorsPage() {
       }
     } catch {
       showToast("Service interruption", "error");
+    } finally {
+      helpers.setSubmitting(false);
     }
+    },
+  });
+
+  const formatPhoneNumber = (value: string) => {
+    const digits = value.replace(/\D/g, "");
+    let raw = digits;
+    if (digits.startsWith("91")) {
+      raw = digits.slice(2);
+    }
+    raw = raw.slice(0, 10);
+
+    if (raw.length === 0) return "+91 ";
+    if (raw.length <= 5) return `+91 ${raw}`;
+    return `+91 ${raw.slice(0, 5)} ${raw.slice(5)}`;
   };
 
   const handleDelete = async (id: string) => {
@@ -176,16 +220,24 @@ export default function AdminMentorsPage() {
   };
 
   const openEditModal = (m: Mentor) => {
-    setFormData({
+    mentorFormik.setValues({
       name: m.name,
       email: m.email,
       department: m.department,
-      phone: m.phone || "",
-      role: "mentor"
+      phone: formatPhoneNumber(m.phone || ""),
+      role: "mentor",
     });
+    mentorFormik.setTouched({});
     setIsEditing(true);
     setSelectedMentorId(m.id);
     setIsModalOpen(true);
+  };
+
+  const handleOpenEditById = (id: string) => {
+    const mentor = mentors.find((m) => m.id === id);
+    if (mentor) {
+      openEditModal(mentor);
+    }
   };
 
   const toggleSelectRow = (id: string) => {
@@ -220,8 +272,9 @@ export default function AdminMentorsPage() {
           </div>
           <button 
             onClick={() => {
-              setFormData({ name: "", email: "", department: "AI", phone: "", role: "mentor" });
+              mentorFormik.resetForm({ values: initialMentorValues });
               setIsEditing(false);
+              setSelectedMentorId(null);
               setIsModalOpen(true);
             }}
             className="btn btn-primary"
@@ -234,11 +287,11 @@ export default function AdminMentorsPage() {
         <div className="card p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="space-y-2">
-              <label className="label">Search Mentors</label>
+              <label className="label">Search Name</label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-content-muted" />
                 <input
-                  placeholder="Name or Email"
+                  placeholder="Ex: John Doe"
                   value={search}
                   onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                   className="input has-icon-left"
@@ -254,8 +307,8 @@ export default function AdminMentorsPage() {
                   onChange={(e) => { setDepartmentFilter(e.target.value); setPage(1); }}
                   className="select"
                 >
-                  <option value="">All Divisions</option>
-                  {DEPARTMENTS.map(d => (
+                  <option value="">All Departments</option>
+                  {departments.map(d => (
                     <option key={d} value={d}>{d} Division</option>
                   ))}
                 </select>
@@ -331,14 +384,28 @@ export default function AdminMentorsPage() {
                       <div className="card card-interactive p-6 h-full">
                         <div className="flex flex-col h-full">
                           <div className="flex items-start justify-between gap-4 mb-6">
-                            <div className="avatar avatar-lg">
-                              {mentor.name[0]}
-                            </div>
+                             <div className="avatar avatar-lg cursor-pointer" onClick={() => setQuickViewEntity({ id: mentor.id, type: "mentor" })}>
+                               {mentor.name[0]}
+                             </div>
                             <div className="flex gap-2">
-                               <button onClick={() => openEditModal(mentor)} className="btn btn-ghost btn-sm btn-icon-edit">
+                               <button
+                                  onClick={() => setResetPasswordUser({ id: mentor.id, name: mentor.name })}
+                                  className="btn btn-icon btn-sm btn-ghost"
+                                  title="Reset Password"
+                               >
+                                  <ShieldCheck className="w-4 h-4" />
+                               </button>
+                               <button
+                                  onClick={() => setQuickViewEntity({ id: mentor.id, type: "mentor" })}
+                                  className="btn btn-icon btn-sm btn-ghost"
+                                  title="Details"
+                               >
+                                  <Search className="w-4 h-4" />
+                               </button>
+                                <button onClick={() => openEditModal(mentor)} className="btn btn-icon btn-sm btn-ghost btn-icon-edit">
                                   <Edit3 className="w-4 h-4" />
                                </button>
-                               <button onClick={() => handleDelete(mentor.id)} className="btn btn-ghost btn-sm btn-icon-delete">
+                                <button onClick={() => handleDelete(mentor.id)} className="btn btn-icon btn-sm btn-ghost btn-icon-delete">
                                   <Trash2 className="w-4 h-4" />
                                </button>
                             </div>
@@ -382,48 +449,50 @@ export default function AdminMentorsPage() {
                           <th className="w-12">
                             <input
                               type="checkbox"
-                              className="w-4 h-4 rounded border-border-default text-primary-text focus:ring-border-focus cursor-pointer"
+                              className="w-4 h-4 rounded border-border-default text-primary focus:ring-2 focus:ring-primary/20 cursor-pointer"
                               checked={mentors.length > 0 && selectedIds.length === mentors.length}
                               onChange={toggleSelectAll}
                             />
                           </th>
-                          <th className="cursor-pointer" onClick={() => handleSort("name")} aria-sort={sortBy === "name" ? (sortOrder as "ascending" | "descending") : undefined}>
+                          <th className="cursor-pointer min-w-55" onClick={() => handleSort("name")} aria-sort={sortBy === "name" ? (sortOrder as "ascending" | "descending") : undefined}>
                             <div className="flex items-center gap-2">
                               Mentor Details
-                              {sortBy === "name" ? (sortOrder === "asc" ? <ChevronUp className="w-3 h-3 text-primary-text" /> : <ChevronDown className="w-3 h-3 text-primary-text" />) : <ArrowUpDown className="w-3 h-3 opacity-0 group-hover:opacity-50" />}
+                              {sortBy === "name" ? (sortOrder === "asc" ? <ChevronUp className="w-3 h-3 text-primary" /> : <ChevronDown className="w-3 h-3 text-primary" />) : <ArrowUpDown className="w-3 h-3 opacity-50" />}
                             </div>
                           </th>
                           <th className="cursor-pointer" onClick={() => handleSort("department")} aria-sort={sortBy === "department" ? (sortOrder as "ascending" | "descending") : undefined}>
                             <div className="flex items-center gap-2">
                               Department
-                              {sortBy === "department" ? (sortOrder === "asc" ? <ChevronUp className="w-3 h-3 text-primary-text" /> : <ChevronDown className="w-3 h-3 text-primary-text" />) : <ArrowUpDown className="w-3 h-3 opacity-0 group-hover:opacity-50" />}
+                              {sortBy === "department" ? (sortOrder === "asc" ? <ChevronUp className="w-3 h-3 text-primary" /> : <ChevronDown className="w-3 h-3 text-primary" />) : <ArrowUpDown className="w-3 h-3 opacity-50" />}
                             </div>
                           </th>
                           <th>Contact</th>
-                          <th className="text-right">Actions</th>
+                          <th className="text-center align-middle">
+                            <div className="flex justify-center w-full">Actions</div>
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
                         {mentors.map((mentor) => (
                           <tr 
                             key={mentor.id}
-                            className={selectedIds.includes(mentor.id) ? 'bg-primary-subtle' : ''}
+                            className={selectedIds.includes(mentor.id) ? 'bg-surface-muted' : ''}
                           >
                             <td>
-                              <input
-                                type="checkbox"
-                                className="w-4 h-4 rounded border-border-default text-primary-text focus:ring-border-focus cursor-pointer"
-                                checked={selectedIds.includes(mentor.id)}
-                                onChange={() => toggleSelectRow(mentor.id)}
-                              />
+                                <input
+                                  type="checkbox"
+                                  className="w-4 h-4 rounded border-border-default text-primary focus:ring-2 focus:ring-primary/20 cursor-pointer"
+                                  checked={selectedIds.includes(mentor.id)}
+                                  onChange={() => toggleSelectRow(mentor.id)}
+                                />
                             </td>
-                            <td className="min-w-[200px]">
+                            <td className="min-w-50">
                               <div className="flex items-center gap-3">
-                                <div className="avatar avatar-md">
-                                  {mentor.name[0]}
+                                <div className="avatar avatar-md cursor-pointer" onClick={() => setQuickViewEntity({ id: mentor.id, type: "mentor" })}>
+                                  {mentor.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
                                 </div>
                                 <div className="flex flex-col">
-                                  <span className="font-medium text-content-primary">{mentor.name}</span>
+                                  <span className="font-semibold text-content-primary hover:text-primary cursor-pointer transition-colors" onClick={() => setQuickViewEntity({ id: mentor.id, type: "mentor" })}>{mentor.name}</span>
                                   <span className="text-sm text-content-secondary">{mentor.email}</span>
                                 </div>
                               </div>
@@ -436,18 +505,32 @@ export default function AdminMentorsPage() {
                             <td className="text-content-primary">
                               {mentor.phone || "---"}
                             </td>
-                            <td>
-                              <div className="flex items-center justify-end gap-2">
+                            <td className="text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => setResetPasswordUser({ id: mentor.id, name: mentor.name })}
+                                  className="btn btn-icon btn-sm btn-ghost"
+                                  title="Reset Password"
+                                >
+                                  <ShieldCheck className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => setQuickViewEntity({ id: mentor.id, type: "mentor" })}
+                                  className="btn btn-icon btn-sm btn-ghost"
+                                  title="Details"
+                                >
+                                  <Search className="w-4 h-4" />
+                                </button>
                                 <button 
                                   onClick={() => openEditModal(mentor)}
-                                  className="btn btn-ghost btn-sm btn-icon-edit"
+                                  className="btn btn-icon btn-sm btn-ghost btn-icon-edit"
                                   title="Edit Profile"
                                 >
                                    <Edit3 className="w-4 h-4" />
                                 </button>
                                 <button 
                                   onClick={() => handleDelete(mentor.id)}
-                                  className="btn btn-ghost btn-sm btn-icon-delete"
+                                  className="btn btn-icon btn-sm btn-ghost btn-icon-delete"
                                   title="Delete Personnel"
                                 >
                                    <Trash2 className="w-4 h-4" />
@@ -478,49 +561,74 @@ export default function AdminMentorsPage() {
           title={isEditing ? "Edit Mentor" : "Add Mentor"}
           size="lg"
         >
-          <form onSubmit={handleCreateOrUpdate} className="space-y-6">
+          <form onSubmit={mentorFormik.handleSubmit} className="space-y-6">
+            {mentorFormik.submitCount > 0 && Object.keys(mentorFormik.errors).length > 0 && (
+              <div className="alert alert-error">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <p className="text-sm font-medium">Please fix the errors below before submitting.</p>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                   <label className="label">Full Name</label>
                   <input
+                    name="name"
                     placeholder="Full Name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    value={mentorFormik.values.name}
+                    onChange={mentorFormik.handleChange}
+                    onBlur={mentorFormik.handleBlur}
                     required
-                    className="input"
+                    className={`input ${mentorFormik.touched.name && mentorFormik.errors.name ? "border-error-text" : ""}`}
                   />
+                  {mentorFormik.touched.name && mentorFormik.errors.name && <p className="form-error">{mentorFormik.errors.name}</p>}
               </div>
               <div className="space-y-2">
                   <label className="label">Email Address</label>
                   <input
+                    name="email"
                     type="email"
                     placeholder="Email Address"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    value={mentorFormik.values.email}
+                    onChange={mentorFormik.handleChange}
+                    onBlur={mentorFormik.handleBlur}
                     required
-                    className="input"
+                    className={`input ${mentorFormik.touched.email && mentorFormik.errors.email ? "border-error-text" : ""}`}
                   />
+                  {mentorFormik.touched.email && mentorFormik.errors.email && <p className="form-error">{mentorFormik.errors.email}</p>}
               </div>
               <div className="space-y-2">
                   <label className="label">Department</label>
                   <select
-                    value={formData.department}
-                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                    name="department"
+                    value={mentorFormik.values.department}
+                    onChange={mentorFormik.handleChange}
+                    onBlur={mentorFormik.handleBlur}
                     className="select"
                   >
-                    {DEPARTMENTS.map(d => (
+                    {departments.map(d => (
                       <option key={d} value={d}>{d}</option>
                     ))}
                   </select>
+                  {mentorFormik.touched.department && mentorFormik.errors.department && <p className="form-error">{mentorFormik.errors.department}</p>}
               </div>
               <div className="space-y-2">
                   <label className="label">Phone Number</label>
                   <input
+                    name="phone"
                     placeholder="Phone Number"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="input"
+                    value={mentorFormik.values.phone}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      let newValue = value;
+                      if (!value.startsWith("+91 ")) {
+                        newValue = "+91 " + value.replace(/^\+?9?1?\s?/, "");
+                      }
+                      mentorFormik.setFieldValue("phone", formatPhoneNumber(newValue));
+                    }}
+                    onBlur={() => mentorFormik.setFieldTouched("phone", true)}
+                    className={`input ${mentorFormik.touched.phone && mentorFormik.errors.phone ? "border-error-text" : ""}`}
                   />
+                  {mentorFormik.touched.phone && mentorFormik.errors.phone && <p className="form-error">{mentorFormik.errors.phone}</p>}
               </div>
             </div>
 
@@ -529,15 +637,17 @@ export default function AdminMentorsPage() {
                   type="button" 
                   onClick={() => setIsModalOpen(false)}
                   className="btn btn-secondary"
+                  disabled={mentorFormik.isSubmitting}
                >
                   Cancel
                </button>
                <button 
                   type="submit" 
                   className="btn btn-primary"
+                  disabled={mentorFormik.isSubmitting}
                >
-                  {isEditing ? <Edit3 className="w-4 h-4" /> : <PlusCircle className="w-4 h-4" />}
-                  {isEditing ? "Save Changes" : "Add Mentor"}
+                  {mentorFormik.isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : isEditing ? <Edit3 className="w-4 h-4" /> : <PlusCircle className="w-4 h-4" />}
+                  {mentorFormik.isSubmitting ? "Submitting..." : isEditing ? "Save Changes" : "Add Mentor"}
                </button>
             </div>
           </form>
@@ -548,6 +658,21 @@ export default function AdminMentorsPage() {
           onClear={() => setSelectedIds([])}
           onDelete={handleBulkDelete}
           onExport={handleExport}
+        />
+
+        <QuickViewModal
+          isOpen={!!quickViewEntity}
+          onClose={() => setQuickViewEntity(null)}
+          entityId={quickViewEntity?.id || null}
+          entityType={quickViewEntity?.type || null}
+          onEdit={handleOpenEditById}
+        />
+
+        <ChangePasswordModal
+          isOpen={!!resetPasswordUser}
+          onClose={() => setResetPasswordUser(null)}
+          userId={resetPasswordUser?.id || null}
+          userName={resetPasswordUser?.name || null}
         />
       </div>
     </DashboardLayout>

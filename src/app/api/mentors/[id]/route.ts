@@ -4,6 +4,9 @@ import { hasuraMutation, hasuraQuery } from "@/lib/hasura";
 import { GET_MENTOR_BY_ID, GET_DEPARTMENT_BY_NAME } from "@/lib/graphql/queries";
 import { UPDATE_MENTOR_USER, DELETE_MENTOR_USER } from "@/lib/graphql/mutations";
 import { logActivity } from "@/lib/activityService";
+import { createMentorSchema } from "@/lib/validations/schemas";
+
+const DEPARTMENTS = ["AI", "ODOO", "JAVA", "MOBILE", "SAP", "QC", "PHP", "RPA"];
 
 /**
  * Manage individual mentor data.
@@ -66,6 +69,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     if (!body.name || !body.email) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
 
+    const validation = createMentorSchema(DEPARTMENTS).safeParse({
+      name: body?.name,
+      email: body?.email,
+      department: body?.department,
+      phone: body?.phone,
+      role: "mentor",
+    });
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error.issues[0]?.message || "Invalid mentor payload" }, { status: 400 });
+    }
+
     // Get department ID from name if provided
     let departmentId = null;
     if (body.department) {
@@ -90,10 +104,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       } | null;
     } | null }>(UPDATE_MENTOR_USER, {
       id,
-      name: body.name.trim(),
-      email: body.email.trim().toLowerCase(),
+      name: validation.data.name.trim(),
+      email: validation.data.email.trim().toLowerCase(),
       departmentId: departmentId,
-      phone: body.phone?.trim() || null,
+      phone: validation.data.phone?.trim() || null,
     });
 
     if (!updated.update_users_by_pk) return NextResponse.json({ error: "Not found" }, { status: 404 });

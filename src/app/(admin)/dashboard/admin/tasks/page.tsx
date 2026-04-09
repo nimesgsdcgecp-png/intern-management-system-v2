@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useFormik } from "formik";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { PlusCircle, Trash2, CheckCircle2, Clock, Activity, CheckSquare, LayoutGrid, List, Search, Users } from "lucide-react";
+import { PlusCircle, Trash2, CheckCircle2, Clock, Activity, CheckSquare, LayoutGrid, List, Search, Users, AlertTriangle, Loader2 } from "lucide-react";
 import { KanbanBoard } from "@/components/features/KanbanBoard";
 import { Select } from "@/components/ui/Select";
 import { TextArea } from "@/components/ui/TextArea";
@@ -14,6 +15,7 @@ import { BulkActionBar } from "@/components/features/BulkActionBar";
 import { Pagination } from "@/components/ui/Pagination";
 import { showToast } from "@/lib/notifications";
 import { downloadCSV } from "@/lib/utils/csv-utils";
+import { taskFormSchema, mapZodErrors } from "@/lib/validations/schemas";
 import Swal from "sweetalert2";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 
@@ -36,6 +38,17 @@ interface Intern {
   department?: string;
 }
 
+const initialAdminTaskValues = {
+  title: "",
+  description: "",
+  assignedInterns: [] as string[],
+  assignedToAll: false,
+  deadline: "",
+  priority: "medium",
+  status: "pending",
+  sendEmail: false,
+};
+
 export default function TasksPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -49,17 +62,6 @@ export default function TasksPage() {
   const [quickViewEntity, setQuickViewEntity] = useState<{ id: string, type: 'intern' | 'mentor' | 'task' } | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<'table' | 'kanban' | 'grid'>('table');
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    assignedInterns: [] as string[],
-    assignedToAll: false,
-    deadline: "",
-    priority: "medium",
-    status: "pending",
-    sendEmail: false,
-  });
   
   // URL Persistent Pagination State
   const page = parseInt(searchParams.get("page") || "1");
@@ -163,68 +165,39 @@ export default function TasksPage() {
     updateQueryParams({ [key]: value, page: 1 });
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
-    if (formErrors[name]) {
-      setFormErrors(prev => {
-        const next = { ...prev };
-        delete next[name];
-        return next;
-      });
-    }
-  };
+  const taskFormik = useFormik({
+    initialValues: initialAdminTaskValues,
+    validate: (values) => {
+      const result = taskFormSchema.safeParse(values);
+      if (result.success) return {};
+      return mapZodErrors(result.error);
+    },
+    onSubmit: async (values, helpers) => {
+      helpers.setSubmitting(true);
 
-  const validate = () => {
-    const errors: Record<string, string> = {};
-    if (!formData.title.trim()) errors.title = "Title is required";
-    else if (formData.title.length < 5) errors.title = "Title must be at least 5 characters";
+      try {
+        const res = await fetch("/api/tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(values),
+        });
 
-    if (!formData.description.trim()) errors.description = "Technical specifications are required";
-    if (!formData.deadline) errors.deadline = "Deadline is required";
-
-    if (!formData.assignedToAll && formData.assignedInterns.length === 0) {
-      errors.assignments = "Select at least one intern or broadcast to all";
-    }
-
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  /**
-   * Logic: Directive Publication
-   * Handles the creation and distribution of new technical tasks.
-   * Supports broadcast assignments and targeted deployments with email notifications.
-   */
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validate()) return;
-
-    setLoading(true);
-
-    try {
-      const res = await fetch("/api/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-
-      if (res.ok) {
-        showToast("Task created successfully", "success");
-        fetchTasks();
-        setIsFormOpen(false);
-        setFormData({ title: "", description: "", assignedInterns: [], assignedToAll: false, deadline: "", priority: "medium", status: "pending", sendEmail: false });
-        setFormErrors({});
-      } else {
-        const error = await res.json();
-        showToast(error.message || "Failed to publish task", "error");
+        if (res.ok) {
+          showToast("Task created successfully", "success");
+          fetchTasks();
+          setIsFormOpen(false);
+          helpers.resetForm({ values: initialAdminTaskValues });
+        } else {
+          const error = await res.json();
+          showToast(error.message || "Failed to publish task", "error");
+        }
+      } catch {
+        showToast("Network failure: Could not reach HQ", "error");
+      } finally {
+        helpers.setSubmitting(false);
       }
-    } catch {
-      showToast("Network failure: Could not reach HQ", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+  });
 
   const handleDelete = async (id: string) => {
     const result = await Swal.fire({
@@ -325,54 +298,54 @@ export default function TasksPage() {
           title="Configure Technical Directive"
           size="lg"
         >
-          <form onSubmit={handleSubmit} className="space-y-10">
+          <form onSubmit={taskFormik.handleSubmit} className="space-y-10">
+            {taskFormik.submitCount > 0 && Object.keys(taskFormik.errors).length > 0 && (
+              <div className="alert alert-error">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <p className="text-sm font-medium">Please fix the errors below before submitting.</p>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
               <div className="space-y-8">
-                <Input label="Directive Title" name="title" value={formData.title} onChange={handleInputChange} required placeholder="Ex: Database Migration" error={formErrors.title} />
-                <TextArea label="Technical Specifications" name="description" value={formData.description} onChange={handleInputChange} required placeholder="Outline the requirements..." rows={6} error={formErrors.description} />
+                <Input label="Directive Title" name="title" value={taskFormik.values.title} onChange={taskFormik.handleChange} onBlur={taskFormik.handleBlur} required placeholder="Ex: Database Migration" error={taskFormik.touched.title ? taskFormik.errors.title : undefined} />
+                <TextArea label="Technical Specifications" name="description" value={taskFormik.values.description} onChange={taskFormik.handleChange} onBlur={taskFormik.handleBlur} required placeholder="Outline the requirements..." rows={6} error={taskFormik.touched.description ? taskFormik.errors.description : undefined} />
               </div>
 
               <div className="space-y-8">
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
                     <label className="text-[10px] font-black uppercase tracking-[0.2em] text-content-muted">Assign To</label>
-                    {formErrors.assignments && <span className="text-[10px] font-bold text-error-text uppercase tracking-widest">{formErrors.assignments}</span>}
+                    {taskFormik.touched.assignedInterns && taskFormik.errors.assignedInterns && <span className="text-[10px] font-bold text-error-text uppercase tracking-widest">{taskFormik.errors.assignedInterns}</span>}
                   </div>
-                  <label className={`flex items-center gap-4 p-5 bg-surface-input rounded-2xl border cursor-pointer hover:bg-surface-muted transition-all group active:scale-[0.98] shadow-subtle ${formErrors.assignments ? 'border-error-text ring-2 ring-error-subtle' : 'border-border-default'}`}>
+                  <label className={`flex items-center gap-4 p-5 bg-surface-input rounded-2xl border cursor-pointer hover:bg-surface-muted transition-all group active:scale-[0.98] shadow-subtle ${taskFormik.touched.assignedInterns && taskFormik.errors.assignedInterns ? 'border-error-text ring-2 ring-error-subtle' : 'border-border-default'}`}>
                     <input
                       type="checkbox"
-                      checked={formData.assignedToAll}
+                      name="assignedToAll"
+                      checked={taskFormik.values.assignedToAll}
                       onChange={(e) => {
-                        setFormData({ ...formData, assignedToAll: e.target.checked, assignedInterns: e.target.checked ? [] : formData.assignedInterns });
-                        if (formErrors.assignments) setFormErrors(prev => {
-                          const next = { ...prev };
-                          delete next.assignments;
-                          return next;
-                        });
+                        taskFormik.setFieldValue("assignedToAll", e.target.checked);
+                        if (e.target.checked) taskFormik.setFieldValue("assignedInterns", []);
+                        taskFormik.setFieldTouched("assignedInterns", true);
                       }}
                       className="w-5 h-5 rounded-lg border-border-input text-primary focus:ring-border-focus transition-all"
                     />
                     <span className="font-extrabold text-content-primary tracking-tight">Broadcast to all active interns</span>
                   </label>
 
-                  {!formData.assignedToAll && (
-                    <div className={`max-h-56 overflow-y-auto border rounded-2xl p-5 bg-surface-muted space-y-3 ${formErrors.assignments ? 'border-error-text ring-2 ring-error-subtle' : 'border-border-default'}`}>
+                  {!taskFormik.values.assignedToAll && (
+                    <div className={`max-h-56 overflow-y-auto border rounded-2xl p-5 bg-surface-muted space-y-3 ${taskFormik.touched.assignedInterns && taskFormik.errors.assignedInterns ? 'border-error-text ring-2 ring-error-subtle' : 'border-border-default'}`}>
                       <p className="text-[10px] font-bold text-content-muted uppercase mb-2">Select Individual Interns</p>
                       {interns.map(i => (
                         <label key={i.id} className="flex items-center gap-4 p-3 hover:bg-surface-input rounded-xl transition-all cursor-pointer border border-transparent">
                           <input
                             type="checkbox"
-                            checked={formData.assignedInterns.includes(i.id)}
+                            checked={taskFormik.values.assignedInterns.includes(i.id)}
                             onChange={() => {
-                              const nextInterns = formData.assignedInterns.includes(i.id) ? formData.assignedInterns.filter(id => id !== i.id) : [...formData.assignedInterns, i.id];
-                              setFormData({ ...formData, assignedInterns: nextInterns });
-                              if (formErrors.assignments && nextInterns.length > 0) {
-                                setFormErrors(prev => {
-                                  const next = { ...prev };
-                                  delete next.assignments;
-                                  return next;
-                                });
-                              }
+                              const nextInterns = taskFormik.values.assignedInterns.includes(i.id)
+                                ? taskFormik.values.assignedInterns.filter(id => id !== i.id)
+                                : [...taskFormik.values.assignedInterns, i.id];
+                              taskFormik.setFieldValue("assignedInterns", nextInterns);
+                              taskFormik.setFieldTouched("assignedInterns", true);
                             }}
                             className="w-4 h-4 rounded-md text-primary border-border-input"
                           />
@@ -384,8 +357,8 @@ export default function TasksPage() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2">
-                  <Input label="Deadline" type="date" name="deadline" value={formData.deadline} onChange={handleInputChange} required error={formErrors.deadline} />
-                  <Select label="Priority" name="priority" value={formData.priority} onChange={handleInputChange}>
+                  <Input label="Deadline" type="date" name="deadline" value={taskFormik.values.deadline} onChange={taskFormik.handleChange} onBlur={taskFormik.handleBlur} required error={taskFormik.touched.deadline ? taskFormik.errors.deadline : undefined} />
+                  <Select label="Priority" name="priority" value={taskFormik.values.priority} onChange={taskFormik.handleChange} onBlur={taskFormik.handleBlur}>
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
                     <option value="high">High</option>
@@ -397,8 +370,8 @@ export default function TasksPage() {
                     <input
                       type="checkbox"
                       name="sendEmail"
-                      checked={formData.sendEmail}
-                      onChange={(e) => setFormData({ ...formData, sendEmail: e.target.checked })}
+                      checked={taskFormik.values.sendEmail}
+                      onChange={(e) => taskFormik.setFieldValue("sendEmail", e.target.checked)}
                       className="w-5 h-5 rounded-lg border-border-input text-primary focus:ring-border-focus transition-all"
                     />
                     <div className="flex flex-col">
@@ -411,8 +384,10 @@ export default function TasksPage() {
             </div>
 
             <div className="flex justify-end gap-4 pt-8 border-t border-border-subtle">
-              <Button type="button" variant="secondary" onClick={() => setIsFormOpen(false)} className="px-8">Discard</Button>
-              <Button type="submit" className="px-12 btn btn-primary">Publish Directive</Button>
+              <Button type="button" variant="secondary" onClick={() => setIsFormOpen(false)} className="px-8" disabled={taskFormik.isSubmitting}>Discard</Button>
+              <Button type="submit" className="px-12 btn btn-primary" disabled={taskFormik.isSubmitting} loading={taskFormik.isSubmitting} icon={taskFormik.isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : undefined}>
+                {taskFormik.isSubmitting ? "Submitting..." : "Publish Directive"}
+              </Button>
             </div>
           </form>
         </Modal>
@@ -447,7 +422,7 @@ export default function TasksPage() {
               </button>
             </div>
             <Button
-              onClick={() => { setIsFormOpen(true); }}
+              onClick={() => { taskFormik.resetForm({ values: initialAdminTaskValues }); setIsFormOpen(true); }}
               icon={<PlusCircle className="w-5 h-5" />}
               className="btn btn-primary px-8"
             >
@@ -514,7 +489,7 @@ export default function TasksPage() {
               <CheckCircle2 className="w-16 h-16 text-content-disabled mx-auto mb-6" />
               <h3 className="text-lg font-bold text-content-primary">No tasks found</h3>
               <p className="text-content-secondary mt-2 mb-8 text-sm">Update your filters or create a new task.</p>
-              <Button onClick={() => setIsFormOpen(true)} className="btn btn-primary">Create Task</Button>
+              <Button onClick={() => { taskFormik.resetForm({ values: initialAdminTaskValues }); setIsFormOpen(true); }} className="btn btn-primary">Create Task</Button>
             </div>
           ) : viewMode === 'kanban' ? (
             <KanbanBoard
@@ -594,7 +569,7 @@ export default function TasksPage() {
                             />
                           </div>
                         </td>
-                        <td className="min-w-[300px]">
+                        <td className="min-w-75">
                           <button
                             onClick={() => setQuickViewEntity({ id: task.id, type: 'task' })}
                             className="flex items-center gap-5 text-left group/btn"
@@ -619,7 +594,7 @@ export default function TasksPage() {
                             <div className="avatar avatar-sm">
                               {getInternNames(task).charAt(0)}
                             </div>
-                            <span className="text-sm font-bold text-content-secondary tracking-tight truncate max-w-[150px]">{getInternNames(task)}</span>
+                            <span className="text-sm font-bold text-content-secondary tracking-tight truncate max-w-37.5">{getInternNames(task)}</span>
                           </div>
                         </td>
                         <td>

@@ -237,7 +237,7 @@ export default function SystemLogsPage() {
                       <div>
                         <label className="label mb-2">Event Data</label>
                         <div className="bg-slate-900 rounded-lg p-4 overflow-hidden">
-                          <pre className="text-emerald-400 text-xs font-mono whitespace-pre-wrap leading-relaxed overflow-x-auto max-h-[300px]">
+                          <pre className="text-emerald-400 text-xs font-mono whitespace-pre-wrap leading-relaxed overflow-x-auto max-h-75">
                             {JSON.stringify(selectedLog.metadata, null, 2)}
                           </pre>
                         </div>
@@ -265,7 +265,7 @@ export default function SystemLogsPage() {
                     className="flex flex-col items-center justify-center py-16 text-center"
                   >
                     <ClipboardList className="w-12 h-12 text-content-disabled mb-4" />
-                    <p className="text-sm text-content-muted max-w-[200px]">
+                    <p className="text-sm text-content-muted max-w-50">
                       Select a log entry to view details
                     </p>
                   </motion.div>

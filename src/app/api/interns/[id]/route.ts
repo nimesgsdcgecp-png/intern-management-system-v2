@@ -6,8 +6,9 @@ import {
   DELETE_INTERN_AND_USER,
   UPDATE_INTERN_AND_USER,
 } from "@/lib/graphql/mutations";
-import { GET_DEPARTMENT_BY_NAME } from "@/lib/graphql/queries";
+import { GET_DEPARTMENT_BY_NAME, GET_DEPARTMENTS } from "@/lib/graphql/queries";
 import { logActivity } from "@/lib/activityService";
+import { createInternSchema } from "@/lib/validations/schemas";
 
 export async function GET(
   request: NextRequest,
@@ -47,16 +48,38 @@ export async function PUT(
 
     const { id } = await params;
     const updates = await request.json();
+    const allDepartments = await hasuraQuery<{ departments: { name: string }[] }>(GET_DEPARTMENTS);
+    const departmentNames = (allDepartments.departments || []).map((d) => d.name);
 
     const existing = await getInternById(id);
     if (!existing) {
       return NextResponse.json({ error: "Intern not found" }, { status: 404 });
     }
 
+    const candidate = {
+      name: updates?.name ?? existing.name,
+      email: String((updates?.email ?? existing.email) || "").toLowerCase(),
+      phone: updates?.phone ?? existing.phone ?? "",
+      department: updates?.department ?? existing.department ?? "",
+      mentorId: updates?.mentorId ?? existing.mentorId ?? "",
+      startDate: updates?.startDate ?? existing.startDate ?? "",
+      endDate: updates?.endDate ?? existing.endDate ?? "",
+      collegeName: updates?.collegeName ?? existing.collegeName ?? "",
+      university: updates?.university ?? existing.university ?? "",
+      graduationDegree: "",
+    };
+    const validation = createInternSchema(departmentNames).safeParse(candidate);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error.issues[0]?.message || "Invalid intern payload" }, { status: 400 });
+    }
+
     // Get department ID if department name is provided
     let departmentId = existing.departmentId;
     if (updates?.department && updates.department !== existing.department) {
-      const deptData = await hasuraQuery(GET_DEPARTMENT_BY_NAME, { name: updates.department.toUpperCase() });
+      const deptData = await hasuraQuery<{ departments: { id: string; name: string }[] }>(
+        GET_DEPARTMENT_BY_NAME,
+        { name: updates.department.toUpperCase() }
+      );
       if (deptData.departments && deptData.departments.length > 0) {
         departmentId = deptData.departments[0].id;
       }

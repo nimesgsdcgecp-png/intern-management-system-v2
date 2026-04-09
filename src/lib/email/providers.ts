@@ -78,6 +78,7 @@ export class NodemailerProvider implements EmailProvider {
 
 export class SendGridProvider implements EmailProvider {
   async send(_options: EmailOptions): Promise<EmailResult> {
+    void _options;
     // Placeholder for SendGrid implementation
     // Could be implemented in the future if needed
     throw new Error('SendGrid provider not implemented yet');
